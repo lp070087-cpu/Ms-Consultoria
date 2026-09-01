@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MS Consultoria — Sistema (Demonstração)</title>
+  <meta name="description" content="Apresentação visual navegável do futuro sistema interno da MS Consultoria — Saúde e Segurança do Trabalho. Dados demonstrativos." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 4 7v8c0 7 5 13 12 15 7-2 12-8 12-15V7L16 2z' fill='%230d3b2e'/%3E%3Cpath d='M16 7l-6.5 3v5.5c0 4.6 2.8 8.6 6.5 10 3.7-1.4 6.5-5.4 6.5-10V10L16 7z' fill='%23ffffff'/%3E%3Cpath d='M16 10.5l-4 1.9v3.4c0 3.1 1.7 5.9 4 7.1 2.3-1.2 4-4 4-7.1v-3.4l-4-1.9z' fill='%23c6f0d4'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/sistema.css" />
+</head>
+<body>
+  <!-- ======== BARRA DE DEMONSTRAÇÃO ======== -->
+  <div class="demo-bar" id="demo-bar">
+    <span class="demo-bar__pulse"></span>
+    <strong>Demonstração visual</strong>
+    <span class="demo-bar__sep">·</span>
+    <span>dados fictícios — nenhum dado real da MS é usado aqui</span>
+    <a class="demo-bar__link" href="../index.html" target="_blank" rel="noopener">Ver site institucional ↗</a>
+  </div>
+
+  <!-- ======== LOGIN DEMONSTRATIVO ======== -->
+  <div class="login" id="login" hidden>
+    <div class="login__card">
+      <div class="login__brand">
+        <span class="brand__shield brand__shield--lg" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="46" height="46"><path d="M16 2 4 7v8c0 7 5 13 12 15 7-2 12-8 12-15V7L16 2z" fill="currentColor"/><path d="M16 7l-6.5 3v5.5c0 4.6 2.8 8.6 6.5 10 3.7-1.4 6.5-5.4 6.5-10V10L16 7z" fill="#fff"/></svg>
+        </span>
+        <strong>MS Consultoria</strong>
+        <em>Saúde e Segurança do Trabalho</em>
+      </div>
+      <h1>Acessar sistema</h1>
+      <p class="login__sub">Entre para visualizar a demonstração do futuro sistema interno.</p>
+
+      <form class="login__form" id="login-form" novalidate>
+        <label class="field">
+          <span class="field__label">E-mail</span>
+          <input class="field__input" type="email" id="login-email" value="equipe@msconsultoria.com.br" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span class="field__label">Senha</span>
+          <span class="field__password">
+            <input class="field__input" type="password" id="login-pass" value="demonstracao" autocomplete="off" />
+            <button type="button" class="field__eye" data-eye="#login-pass" aria-label="Mostrar senha">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 5c-5 0-9 4.5-11 7 2 2.5 6 7 11 7s9-4.5 11-7c-2-2.5-6-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+            </button>
+          </span>
+        </label>
+        <div class="login__row">
+          <label class="check"><input type="checkbox" id="login-keep" checked /><span>Manter conectado</span></label>
+          <button type="button" class="link-btn" data-toast="Recuperação de senha disponível na versão final.">Esqueci a senha</button>
+        </div>
+        <button class="btn btn--primary btn--block" type="submit">Entrar no sistema</button>
+      </form>
+
+      <div class="login__hint">
+        <strong>Ambiente demonstrativo</strong>
+        <p>Clique em <em>Entrar no sistema</em> para navegar pelas telas. Nenhuma senha real é validada.</p>
+      </div>
+    </div>
+    <div class="login__aside" aria-hidden="true">
+      <div class="login__aside-inner">
+        <span class="login__tag">Sistema interno · em desenvolvimento</span>
+        <h2>Gestão completa de <br />saúde e segurança do trabalho</h2>
+        <p>Clientes, obras, serviços, ordens de serviço, relatórios diários, fotos e observações — tudo conectado e organizado por obra.</p>
+        <ul class="login__features">
+          <li>Cliente → Obras → Serviços → RDO → Atividades → Fotos → Observações</li>
+          <li>Relatório Diário de Obra montado automaticamente</li>
+          <li>Fotos vinculadas à obra e à atividade correta</li>
+          <li>Agenda, treinamentos, documentos e equipe em um só lugar</li>
+        </ul>
+        <div class="login__foot">© <span data-year></span> MS Consultoria — demonstração conceitual</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== APLICATIVO ======== -->
+  <div class="app" id="app" hidden>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar" aria-label="Menu do sistema">
+      <div class="sidebar__head">
+        <a class="brand" href="#/dashboard">
+          <span class="brand__shield" aria-hidden="true">
+            <svg viewBox="0 0 32 32" width="30" height="30"><path d="M16 2 4 7v8c0 7 5 13 12 15 7-2 12-8 12-15V7L16 2z" fill="currentColor"/><path d="M16 7l-6.5 3v5.5c0 4.6 2.8 8.6 6.5 10 3.7-1.4 6.5-5.4 6.5-10V10L16 7z" fill="#fff"/></svg>
+          </span>
+          <span class="brand__text">
+            <strong>MS Consultoria</strong>
+            <em>Sistema interno</em>
+          </span>
+        </a>
+        <button class="sidebar__close" id="sidebar-close" aria-label="Fechar menu">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3 10.6 10.6 16.9 4.3z"/></svg>
+        </button>
+      </div>
+
+      <nav class="sidebar__nav" id="sidebar-nav">
+        <span class="sidebar__label">Principal</span>
+        <a class="nav-item" href="#/dashboard" data-nav="dashboard">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 13h6V3H4v10zm0 8h6v-6H4v6zm8 0h8v-10h-8v10zm0-18v6h8V3h-8z"/></svg>
+          <span>Dashboard</span>
+        </a>
+        <a class="nav-item" href="#/clientes" data-nav="clientes">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3zm-8 0c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5c0-2.3-4.7-3.5-7-3.5zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 1.8 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/></svg>
+          <span>Clientes</span>
+        </a>
+        <a class="nav-item" href="#/obras" data-nav="obras">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 8h-1V6a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2zM8 6h8v2H8V6zm11 12H5v-4h14v4zm0-6H5v-2h14v2z"/></svg>
+          <span>Obras</span>
+        </a>
+        <a class="nav-item" href="#/servicos" data-nav="servicos">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 3 7v10l9 5 9-5V7l-9-5zm0 2.3 7 3.9v8.6l-7 3.9-7-3.9V8.2l7-3.9zM12 7l-3.5 2 3.5 2 3.5-2L12 7zm-5 4.4v3.2l4 2.2v-3.2l-4-2.2zm10 0-4 2.2v3.2l4-2.2v-3.2z"/></svg>
+          <span>Serviços / OS</span>
+        </a>
+        <a class="nav-item" href="#/relatorios" data-nav="relatorios">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V5h14v14zM7 9h10V7H7v2zm0 4h10v-2H7v2zm0 4h7v-2H7v2z"/></svg>
+          <span>Relatórios</span>
+        </a>
+        <a class="nav-item" href="#/fotos" data-nav="fotos">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></svg>
+          <span>Fotos</span>
+        </a>
+        <a class="nav-item" href="#/agenda" data-nav="agenda">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zM7 12h5v2H7v-2zm0 4h8v2H7v-2z"/></svg>
+          <span>Agenda</span>
+        </a>
+        <a class="nav-item" href="#/treinamentos" data-nav="treinamentos">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M22 18V3H2v15H0v2h24v-2h-2zm-2 0H4V5h16v13zM6 7h12v2H6V7zm0 4h12v2H6v-2zm0 4h8v2H6v-2z"/></svg>
+          <span>Treinamentos</span>
+        </a>
+
+        <span class="sidebar__label">Gestão</span>
+        <a class="nav-item" href="#/documentos" data-nav="documentos">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+          <span>Documentos</span>
+        </a>
+        <a class="nav-item" href="#/equipe" data-nav="equipe">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-3.3 0-10 1.7-10 5v3h20v-3c0-3.3-6.7-5-10-5z"/></svg>
+          <span>Equipe</span>
+        </a>
+        <a class="nav-item" href="#/notificacoes" data-nav="notificacoes">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6v-5a6 6 0 0 0-4-5.7V5a2 2 0 0 0-4 0v.3A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+          <span>Notificações</span>
+          <span class="nav-item__badge">5</span>
+        </a>
+        <a class="nav-item" href="#/configuracoes" data-nav="configuracoes">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.3 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5zM13 15.5A3.5 3.5 0 1 1 13 8.5a3.5 3.5 0 0 1 0 7z"/></svg>
+          <span>Configurações</span>
+        </a>
+      </nav>
+
+      <div class="sidebar__foot">
+        <a class="nav-item" href="../index.html" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          <span>Site institucional</span>
+        </a>
+        <a class="nav-item" href="#/login" data-nav="logout">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 7l-1.4 1.4L18.2 11H8v2h10.2l-2.6 2.6L17 17l5-5-5-5zM4 5h7V3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7v-2H4V5z"/></svg>
+          <span>Sair</span>
+        </a>
+        <div class="sidebar__user">
+          <span class="avatar avatar--sm">MS</span>
+          <span class="sidebar__user-text">
+            <strong>Maria Silva</strong>
+            <em>Responsável técnica</em>
+          </span>
+        </div>
+      </div>
+    </aside>
+    <div class="sidebar__scrim" id="sidebar-scrim" hidden></div>
+
+    <!-- Conteúdo -->
+    <div class="app__main">
+      <header class="topbar">
+        <button class="topbar__menu" id="topbar-menu" aria-label="Abrir menu">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>
+        </button>
+        <div class="topbar__breadcrumb" id="breadcrumb"></div>
+        <div class="topbar__actions">
+          <label class="topbar__search">
+            <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M15.5 14h-.8l-.3-.3a6.5 6.5 0 1 0-.7.7l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>
+            <input id="global-search" type="search" placeholder="Buscar cliente, obra, relatório…" aria-label="Busca global" />
+          </label>
+          <button class="topbar__icon" data-toast="Central de notificações disponível na versão final." aria-label="Notificações">
+            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6v-5a6 6 0 0 0-4-5.7V5a2 2 0 0 0-4 0v.3A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+            <span class="topbar__dot"></span>
+          </button>
+          <button class="topbar__avatar" data-toast="Perfil da equipe na versão final." aria-label="Perfil">MS</button>
+        </div>
+      </header>
+
+      <main class="view" id="view" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <!-- ======== FAB MOBILE (registro rápido) ======== -->
+  <button class="fab" id="fab" hidden aria-label="Registrar atividade">
+    <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+  </button>
+
+  <!-- ======== BOTTOM SHEET (registro rápido) ======== -->
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet__backdrop" data-sheet-close></div>
+    <div class="sheet__panel" role="dialog" aria-label="Registrar atividade">
+      <span class="sheet__handle"></span>
+      <h3>+ Registrar atividade</h3>
+      <p class="sheet__sub">Registro rápido em campo — a informação fica vinculada à obra e ao relatório do dia.</p>
+      <div class="sheet__grid">
+        <button class="sheet__action" data-sheet-close data-sheet-action="foto">
+          <span class="sheet__icon sheet__icon--camera">
+            <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></svg>
+          </span>
+          <strong>Adicionar foto</strong>
+          <em>Evidência da obra</em>
+        </button>
+        <button class="sheet__action" data-sheet-close data-sheet-action="obs">
+          <span class="sheet__icon sheet__icon--obs">
+            <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M3 3h18v2H3V3zm0 4h18v2H3V7zm0 4h12v2H3v-2zm0 4h12v2H3v-2zm0 4h18v2H3v-2zM20 7.5 21.5 9 18 12.5 14.5 9 16 7.5l2 2 2-2z"/></svg>
+          </span>
+          <strong>Adicionar observação</strong>
+          <em>Anotação na atividade</em>
+        </button>
+        <button class="sheet__action" data-sheet-close data-sheet-action="ocorrencia">
+          <span class="sheet__icon sheet__icon--warn">
+            <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2 1 21h22L12 2zm1 14h-2v2h2v-2zm0-6h-2v4h2v-4z"/></svg>
+          </span>
+          <strong>Registrar ocorrência</strong>
+          <em>Alerta / incidente</em>
+        </button>
+        <button class="sheet__action" data-sheet-close data-sheet-action="atividade">
+          <span class="sheet__icon sheet__icon--task">
+            <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V5h14v14zM7 8h10v2H7V8zm0 4h10v2H7v-2zm0 4h6v2H7v-2z"/></svg>
+          </span>
+          <strong>Registrar atividade</strong>
+          <em>O que foi executado</em>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== MODAL ======== -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal__backdrop" data-modal-close></div>
+    <div class="modal__panel" id="modal-panel" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <!-- ======== TOAST ======== -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/sistema.js"></script>
+</body>
+</html>
