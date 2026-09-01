@@ -15,6 +15,12 @@
 
   var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  // Marca o body como "js ativo" ANTES de qualquer render.
+  // O CSS usa `body.js .rv` para só ocultar conteúdo quando o JS está rodando;
+  // assim nunca há área em branco por falha de animação.
+  if (document.body) document.body.classList.add("js");
+  else document.addEventListener("DOMContentLoaded", function () { document.body.classList.add("js"); });
+
   /* ======================================================================
      DADOS DEMONSTRATIVOS
      ====================================================================== */
@@ -676,9 +682,42 @@
         { t: "Out", title: "CIPA — Reeleição", desc: "Indústria Recife Metal · outubro/2026", obra: "o5" }
       ].map(function (f) { return feedItem(f, f.obra || "o1"); }).join("") +
       "</div></div>" +
+      "</div>" +
+
+      /* ---- Obras em andamento ---- */
+      '<div class="card rv"><div class="card__head"><h3>Obras em andamento</h3><a class="link-btn" href="#/obras">Ver todas</a></div><div class="table-wrap"><table class="table"><thead><tr><th>Cliente</th><th>Obra</th><th>Localização</th><th>Serviço</th><th>Responsável</th><th>Status</th><th>Último RDO</th></tr></thead><tbody>' +
+      obrasEmAndamento().map(function (item, i) {
+        var ultRdo = rdoPorObra(item.o.id)[0];
+        return '<tr class="is-clickable" data-href="#/obra/' + item.o.id + '">' +
+          "<td>" + esc(item.c.nome) + "</td>" +
+          '<td class="cell-strong">' + esc(item.o.nome) + "</td>" +
+          "<td>" + esc(item.o.local) + "</td>" +
+          "<td>" + esc(item.o.servicos[0] ? item.o.servicos[0].nome : "—") + "</td>" +
+          "<td>" + esc(item.o.responsavel) + "</td>" +
+          '<td><span class="status status--active">' + item.o.status + "</span></td>" +
+          "<td>" + (ultRdo ? fmtDate(ultRdo.data) : "—") + "</td>" +
+          "</tr>";
+      }).join("") +
+      "</tbody></table></div></div>" +
+
+      /* ---- Pendências ---- */
+      '<div class="card rv"><div class="card__head"><h3>Pendências</h3><a class="link-btn" href="#/relatorios">Ver relatórios</a></div><div class="feed">' +
+      [
+        { icon: "warn", t: "Rascunho", title: "RDO #034 aguardando revisão", desc: "Residencial Boa Vista · gerado hoje", obra: "o1" },
+        { icon: "warn", t: "Sem RDO", title: "Obra sem relatório hoje", desc: "Torre Comercial Mar · nenhum RDO em 01/09", obra: "o8" },
+        { icon: "amber", t: "Set", title: "Documento vencendo", desc: "NR 35 — Turma B renova em 10/09", obra: "o1" },
+        { icon: "warn", t: "Aberta", title: "Ocorrência aberta", desc: "Piso molhado na escada — pavimento 4", obra: "o1" }
+      ].map(function (f) { return feedItem(f, f.obra || "o1"); }).join("") +
+      "</div></div>" +
       "</div>";
 
     wireView();
+  }
+
+  function obrasEmAndamento() {
+    var todas = [];
+    CLIENTES.forEach(function (c) { c.obras.forEach(function (o) { if (o.status === "Em andamento") todas.push({ c: c, o: o }); }); });
+    return todas;
   }
 
   function feedItem(f, obraLink) {
@@ -1280,7 +1319,51 @@
     actions._ctxObra = null;
 
     var body = "";
-    if (name === "treinamentos") {
+    if (name === "agenda") {
+      body =
+        '<div class="grid-2"><div class="card rv"><div class="card__head"><h3>Agenda operacional</h3><span class="badge badge--amber">Setembro / 2026</span></div><div class="card__pad">' +
+        '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:14px">' +
+        ["D","S","T","Q","Q","S","S"].map(function (d) { return '<div style="text-align:center;font-size:.72rem;font-weight:800;color:var(--grey-500)">' + d + "</div>"; }).join("") +
+        [31,1,2,3,4,5,6].map(function (d, i) {
+          var today = d === 1 ? " style='background:var(--green-700);color:#fff;border-radius:9px'" : "";
+          var has = d === 3 || d === 5 ? " style='background:var(--green-100);color:var(--green-800);border-radius:9px;font-weight:700'" : today;
+          return '<div' + has + ' style="text-align:center;font-size:.84rem;padding:7px 0;border-radius:9px">' + d + "</div>";
+        }).join("") +
+        "</div>" +
+        '<p style="font-size:.82rem;color:var(--grey-500)"><span class="status status--active">Hoje</span> dia com compromissos agendados.</p>' +
+        "</div></div>" +
+        '<div class="card rv"><div class="card__head"><h3>Próximos compromissos</h3><button class="btn btn--primary btn--sm" data-toast-action="Agendamento disponível na versão final.">+ Agendar</button></div><div class="feed">' +
+        [
+          { t: "Hoje · 08:00", title: "Visita técnica", desc: "Residencial Boa Vista — acompanhamento SST", obra: "o1", icon: "" },
+          { t: "Hoje · 14:00", title: "Inspeção de segurança", desc: "Galpão Industrial Norte — NR-12", obra: "o2", icon: "warn" },
+          { t: "Amanhã · 09:00", title: "Treinamento NR 06 — EPI", desc: "Indústria Recife Metal — Planta Recife", obra: "o5", icon: "" },
+          { t: "Qui · 10:00", title: "Entrega de relatório", desc: "Residencial Boa Vista — RDO #034", obra: "o1", icon: "" },
+          { t: "Sáb · 08:30", title: "Reunião de alinhamento", desc: "Vila Mariana Residencial — implantação PGR", obra: "o4", icon: "amber" }
+        ].map(function (f) { return feedItem(f, f.obra || "o1"); }).join("") +
+        "</div></div></div>";
+    } else if (name === "configuracoes") {
+      body =
+        '<div class="card rv"><div class="card__head"><h3>Configurações</h3><span class="badge badge--amber">Demonstração</span></div><div class="card__pad">' +
+        '<div class="feed">' +
+        [
+          { icon: "", title: "Dados da empresa", desc: "Razão social, CNPJ, contatos e endereço da MS Consultoria" },
+          { icon: "", title: "Preferências", desc: "Idioma, fuso horário, formato de data e moeda" },
+          { icon: "", title: "Relatórios", desc: "Modelo padrão do RDO, numeração e regras de revisão" },
+          { icon: "amber", title: "Notificações", desc: "Alertas de RDO, vencimentos, ocorrências e treinamentos" },
+          { icon: "", title: "Usuários e permissões", desc: "Equipe, cargos e níveis de acesso" },
+          { icon: "", title: "Aparência", desc: "Tema claro/escuro e compactação da interface" },
+          { icon: "warn", title: "Integrações futuras", desc: "WhatsApp, e-mail, PDF automático, upload de fotos e pagamentos" }
+        ].map(function (s, i) {
+          var cls = s.icon === "warn" ? " feed__icon--warn" : s.icon === "amber" ? " feed__icon--amber" : "";
+          var svg = s.icon === "warn"
+            ? '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 1 21h22L12 2zm1 14h-2v2h2v-2zm0-6h-2v4h2v-4z"/></svg>'
+            : s.icon === "amber"
+              ? '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 1 21h22L12 2z"/></svg>'
+              : '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.3 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5z"/></svg>';
+          return '<div class="feed__item"><span class="feed__icon' + cls + '">' + svg + '</span><div class="feed__body"><div class="feed__title">' + s.title + '</div><div class="feed__desc">' + s.desc + '</div><div class="feed__meta"><span class="link-btn">Abrir configuração</span></div></div></div>';
+        }).join("") +
+        "</div></div></div>";
+    } else if (name === "treinamentos") {
       body =
         '<div class="card rv"><div class="card__head"><h3>Treinamentos</h3><button class="btn btn--primary btn--sm">+ Novo treinamento</button></div><div class="table-wrap"><table class="table"><thead><tr><th>Treinamento</th><th>Obra</th><th>Data</th><th>Status</th></tr></thead><tbody>' +
         [
@@ -1353,9 +1436,26 @@
         else if (r.parts[2] === "fotos") { showApp(); var ob = obraPorId(r.parts[1]); if (ob) { setCrumbs([{ label: "Clientes", href: "clientes" }, { label: clientePorObra(r.parts[1]).nome, href: "cliente/" + clientePorObra(r.parts[1]).id }, { label: ob.nome, href: "obra/" + ob.id }, { label: "Fotos" }]); actions._ctxObra = ob; renderObraFotos(r.parts[1]); } }
         else renderObra(r.parts[1]);
         break;
-      default: renderDashboard();
+      default: renderNotFound();
     }
     setActiveNav();
+    // REVELA o conteúdo da tela após o render.
+    // (antes, a view era preenchida mas ficava com opacity:0 — causa do conteúdo vazio)
+    revealAll(view);
+  }
+
+  function renderNotFound() {
+    showApp();
+    setCrumbs([{ label: "Página não encontrada" }]);
+    actions._ctxObra = null;
+    view.innerHTML =
+      '<div class="notfound">' +
+      '<div class="notfound__code">404</div>' +
+      "<h2>Página não encontrada</h2>" +
+      "<p>Não encontramos a rota <code>" + esc(location.hash || "#/") + "</code>. A URL pode estar incorreta ou a tela ainda não existe nesta demonstração.</p>" +
+      '<a class="btn btn--primary" href="#/dashboard">Voltar ao Dashboard</a>' +
+      "</div>";
+    wireView();
   }
 
   function renderServicosGlobal() {
@@ -1433,6 +1533,14 @@
         openModal(modalPdfPreview(ob));
       });
     });
+    // Ações de toast (botões demonstrativos dos placeholders)
+    $$("[data-toast-action]").forEach(function (el) {
+      if (el.getAttribute("data-wired")) return;
+      el.setAttribute("data-wired", "1");
+      el.addEventListener("click", function () {
+        showToast(el.getAttribute("data-toast-action"));
+      });
+    });
   }
 
   function initUI() {
@@ -1473,6 +1581,16 @@
     });
     // Ano
     $$("[data-year]").forEach(function (el) { el.textContent = new Date().getFullYear(); });
+
+    // ---- Link "Site institucional" (abre em NOVA ABA, URL ABSOLUTA) ----
+    // O deploy da Vercel tem Root Directory = sistema, então NÃO se pode usar
+    // rota relativa (../) — que voltaria ao próprio sistema. Usa-se URL absoluta.
+    var INSTITUCIONAL_URL = "https://ms-segura-web.lovable.app/";
+    ["site-inst-link", "site-inst-side"].forEach(function (id) {
+      var a = document.getElementById(id);
+      if (a) a.setAttribute("href", INSTITUCIONAL_URL);
+    });
+
     window.addEventListener("hashchange", renderRoute);
   }
 
@@ -1480,9 +1598,12 @@
     initUI();
     // Entrada: sem hash de rota (ou #/login) → tela de login demonstrativo
     var h = location.hash;
-    if (!h || h === "#" || h === "#/" || h === "#/login") {
+    if (h === "#/login") {
       renderLogin();
     } else {
+      // URL raiz / hash vazio / qualquer rota → renderiza imediatamente.
+      // Requisito: ao abrir a apresentação, o Dashboard deve aparecer na hora,
+      // sem área em branco. O login segue acessível em #/login e via "Sair".
       renderRoute();
     }
   }

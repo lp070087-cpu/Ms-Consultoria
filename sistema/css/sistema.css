@@ -454,8 +454,18 @@ textarea.field__input { resize: vertical; min-height: 84px; }
 @keyframes shimmer { 100% { transform: translateX(100%); } }
 
 /* ---------- Reveal ---------- */
-.rv { opacity: 0; transform: translateY(16px); transition: opacity .6s var(--ease), transform .6s var(--ease); }
-.rv.is-in { opacity: 1; transform: none; }
+/* O conteúdo SÓ é ocultado quando o JS está ativo (body.js).
+   Se o JS falhar antes de revelar, nada fica invisível. */
+body.js .rv { opacity: 0; transform: translateY(16px); transition: opacity .6s var(--ease), transform .6s var(--ease); }
+body.js .rv.is-in { opacity: 1; transform: none; }
+body:not(.js) .rv { opacity: 1; transform: none; }
+
+/* ---------- Página não encontrada ---------- */
+.notfound { max-width: 520px; margin: 70px auto; text-align: center; }
+.notfound__code { font-size: 4rem; font-weight: 800; color: var(--green-200); line-height: 1; }
+.notfound h2 { margin: 12px 0 6px; font-size: 1.5rem; }
+.notfound p { color: var(--grey-500); margin-bottom: 24px; }
+.notfound code { background: var(--grey-100); padding: 2px 8px; border-radius: 6px; font-size: .86rem; }
 
 /* ---------- Responsivo ---------- */
 @media (max-width: 1240px) {
