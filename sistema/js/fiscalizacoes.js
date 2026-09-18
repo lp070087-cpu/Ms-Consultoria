@@ -978,6 +978,14 @@
           '<span class="evid-thumb__cap">' + esc(ft.obs) + "</span></button>";
       }).join("") + "</div>" : '<p class="evid-vazio">Sem foto neste item.</p>') +
       '<button class="btn btn--light btn--sm" data-action="add-evidencia" data-fisc="' + f.id + '" data-item="' + it.id + '">+ Foto/Evidência</button></div>' +
+
+      // Ações rápidas do item — pensadas para uso no celular, na própria obra.
+      // A situação já é salva ao tocar, então "Salvar item" confirma a
+      // observação digitada e "Próximo item" leva ao item seguinte.
+      '<div class="chk-item__acoes">' +
+      '<button type="button" class="btn btn--light btn--sm" data-action="salvar-item-checklist" data-fisc="' + f.id + '" data-item="' + it.id + '">Salvar item</button>' +
+      '<button type="button" class="btn btn--primary btn--sm" data-action="proximo-item-checklist" data-item="' + it.id + '">Próximo item →</button>' +
+      "</div>" +
       "</div>";
     return html;
   }
@@ -1442,6 +1450,35 @@
     MS.closeModal();
     MS.showToast("Evidência vinculada à obra, à fiscalização e ao item inspecionado.");
     MS.rerender();
+  };
+
+  // ---- Ações rápidas do item (uso no celular, dentro da obra) ----
+  // A situação já é gravada ao tocar no botão; aqui garantimos que a
+  // observação digitada também fique salva antes de seguir para o próximo.
+  MS.actions["salvar-item-checklist"] = function (el) {
+    var f = MS.state.fiscalizacaoAtual;
+    if (!f) return;
+    var id = el.getAttribute("data-item");
+    var ta = document.querySelector('[data-obs="' + id + '"]');
+    var it = f.itens.filter(function (x) { return x.id === id; })[0];
+    if (it && ta) it.obs = ta.value;
+    MS.showToast("Item salvo nesta demonstração. No sistema final, o registro vai para o servidor.");
+  };
+
+  MS.actions["proximo-item-checklist"] = function (el) {
+    // Leva o foco ao próximo item ainda não verificado do checklist.
+    var f = MS.state.fiscalizacaoAtual;
+    if (!f) return;
+    var atual = el.getAttribute("data-item");
+    var i = 0;
+    for (; i < f.itens.length; i++) if (f.itens[i].id === atual) break;
+    var prox = null;
+    for (var j = i + 1; j < f.itens.length; j++) { if (!f.itens[j].situacao) { prox = f.itens[j]; break; } }
+    if (!prox) for (var k = 0; k < f.itens.length; k++) { if (!f.itens[k].situacao) { prox = f.itens[k]; break; } }
+    if (!prox) { MS.showToast("Todos os itens já foram verificados."); return; }
+    var alvo = document.querySelector('.chk-item[data-item="' + prox.id + '"]');
+    if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ behavior: "smooth", block: "start" });
+    MS.showToast("Próximo item: " + prox.titulo);
   };
 
   // ---- Marcar não conformidade como corrigida ----

@@ -258,7 +258,7 @@
 
   function clienteDe(c) { return MS.CLIENTES.filter(function (x) { return x.id === c.clienteId; })[0]; }
   function obraDe(c) { return MS.obraPorId(c.obraId); }
-  function empresaDe(c) { var cl = clienteDe(c); return cl ? cl.nome : "—"; }
+  function empresaDe(c) { var cl = clienteDe(c); return cl ? cl.nome : (c.empresaNome || "—"); }
   function nomeObraDe(c) { var o = obraDe(c); return o ? o.nome : "—"; }
   function turmaPorId(id) { return TURMAS.filter(function (t) { return t.id === id; })[0]; }
 
@@ -307,12 +307,16 @@
 
   // Pré-visualização do certificado (visual, sem geração real de arquivo).
   function previewCertificado(cfg) {
+    var institucional = (cfg.modelo || "").indexOf("institucional") >= 0;
     return (
-      '<div class="cert-doc">' +
+      '<div class="cert-doc' + (institucional ? " cert-doc--institucional" : "") + '">' +
       '<div class="cert-doc__border">' +
       '<div class="cert-doc__brand">' +
       '<span class="brand__shield"><svg viewBox="0 0 32 32" width="38" height="38"><path d="M16 2 4 7v8c0 7 5 13 12 15 7-2 12-8 12-15V7L16 2z" fill="currentColor"/><path d="M16 7l-6.5 3v5.5c0 4.6 2.8 8.6 6.5 10 3.7-1.4 6.5-5.4 6.5-10V10L16 7z" fill="#fff"/></svg></span>' +
-      '<div><strong>MS CONSULTORIA</strong><span>Saúde e Segurança do Trabalho</span></div>' +
+      '<div class="cert-doc__marca">' +
+      '<strong>MS CONSULTORIA</strong>' +
+      '<span>Saúde e Segurança do Trabalho</span>' +
+      "</div>" +
       "</div>" +
       '<h2 class="cert-doc__titulo">CERTIFICADO</h2>' +
       '<p class="cert-doc__sub">' + esc(cfg.treinamento) + "</p>" +
@@ -327,6 +331,10 @@
       certField("Treinamento", cfg.nr !== "—" ? cfg.nr + " — " + cfg.treinamento : cfg.treinamento) +
       certField("Carga horária", cfg.cargaHoraria + " horas") +
       certField("Data", fmtDate(cfg.data)) +
+      // A validade já é calculada pelo sistema (histórico e status usam esse
+      // dado). Um certificado de NR sem validade não cumpre a função, então
+      // ela aparece no documento sempre que existir.
+      (cfg.validade ? certField("Válido até", fmtDate(cfg.validade)) : "") +
       certField("Local", cfg.local || "—") +
       "</div>" +
       '<div class="cert-doc__foot">' +
@@ -750,7 +758,7 @@
       '<div class="card__pad">' +
       '<div class="modelo is-on"><div class="modelo__thumb">' + ico("cert") + "</div>" +
       '<div class="modelo__b"><strong>Modelo padrão MS Consultoria</strong>' +
-      "<span>Logotipo, título, nome do participante, NR, texto de conclusão, carga horária, data, assinaturas do instrutor e do responsável, QR Code de validação e código único.</span></div>" +
+      "<span>Logotipo, título, nome do participante, NR, texto de conclusão, carga horária, data, validade, assinaturas do instrutor e do responsável, QR Code de validação e código único.</span></div>" +
       '<span class="status status--concluido">Em uso</span></div>' +
       '<div class="modelo"><div class="modelo__thumb">' + ico("template") + "</div>" +
       '<div class="modelo__b"><strong>Modelo institucional — fundo branco</strong>' +
@@ -763,7 +771,8 @@
       '<div class="card__pad"><ul class="campos-lista">' +
       ["Logotipo da MS Consultoria", "Título do certificado", "Nome do participante", "CPF (mascarado na listagem)",
         "Norma Regulamentadora / treinamento", "Texto de conclusão", "Carga horária", "Data de realização",
-        "Local", "Assinatura do responsável técnico", "Assinatura do instrutor", "Código único do certificado",
+        "Validade (calculada pela norma)", "Local",
+        "Assinatura do responsável técnico", "Assinatura do instrutor", "Código único do certificado",
         "QR Code de validação"].map(function (c) { return "<li>" + esc(c) + "</li>"; }).join("") +
       "</ul>" +
       '<div class="card" style="margin-top:14px;padding:12px 14px;background:var(--green-50);border-color:var(--green-100);font-size:.84rem">' +
@@ -783,6 +792,7 @@
         nr: exemplo.nr,
         cargaHoraria: exemplo.cargaHoraria,
         data: exemplo.emissao,
+        validade: exemplo.validade,
         local: exemplo.local,
         instrutor: exemplo.instrutor,
         responsavel: exemplo.responsavel,
@@ -807,17 +817,17 @@
     wiz = {
       etapa: 1,
       arquivo: null,
-      colunas: [
-        { origem: "NOME COMPLETO", destino: "Nome do participante" },
-        { origem: "CPF", destino: "CPF" },
-        { origem: "EMPRESA", destino: "Empresa" },
-        { origem: "CURSO", destino: "Treinamento" },
-        { origem: "DATA", destino: "Data do treinamento" },
-        { origem: "CARGA HORÁRIA", destino: "Carga horária" }
-      ],
-      // Participantes "lidos" do arquivo: dados FICTÍCIOS e estáveis.
+      // Cabeçalhos REAIS encontrados na planilha (vazio até haver arquivo).
+      colunas: [],
+      // Mapa campo-do-sistema → cabeçalho da planilha, escolhido pelo usuário.
+      mapa: {},
+      // Linhas cruas lidas do arquivo, como vieram.
+      linhas: [],
+      // Participantes derivados das linhas reais.
       encontrados: null,
       ignorados: {},
+      origem: null,          // "arquivo" | "demo"
+      aviso: null,           // mensagem de erro/aviso do arquivo
       config: {
         treinamentoId: "nr18",
         empresa: "Construtora Horizonte",
@@ -832,22 +842,336 @@
     };
   }
 
-  // Conjunto de participantes do arquivo "participantes-nr18.xlsx".
-  // Os 27 registros vêm da turma t1 (fictícia) — 25 prontos e 2 a revisar.
+  /* ======================================================================
+     12b. LEITURA REAL DE PLANILHA (100% local, nada sai do navegador)
+     ----------------------------------------------------------------------
+     .xlsx/.xls/.csv são lidos pelo SheetJS, que roda DENTRO da página.
+     O arquivo nunca é enviado a servidor, API, analytics ou storage.
+     ====================================================================== */
+
+  // Campos do sistema que podem receber uma coluna da planilha.
+  var CAMPOS = [
+    { id: "nome", rotulo: "Nome", obrigatorio: true },
+    { id: "cpf", rotulo: "CPF" },
+    { id: "empresa", rotulo: "Empresa" },
+    { id: "treinamento", rotulo: "Treinamento" },
+    { id: "data", rotulo: "Data" },
+    { id: "carga", rotulo: "Carga horária" },
+    { id: "local", rotulo: "Local" },
+    { id: "instrutor", rotulo: "Instrutor" }
+  ];
+
+  // Sinônimos aceitos para sugerir o mapeamento automaticamente.
+  var SINONIMOS = {
+    nome: ["nome", "nome completo", "participante", "aluno", "colaborador", "funcionario", "funcionário", "nome do participante", "nome do aluno"],
+    cpf: ["cpf", "documento", "cpf/cnpj", "cpf do participante"],
+    empresa: ["empresa", "cliente", "razao social", "razão social", "construtora", "orgao", "órgão"],
+    treinamento: ["curso", "treinamento", "nr", "norma", "capacitacao", "capacitação", "tipo de treinamento"],
+    data: ["data", "data do treinamento", "data de realizacao", "data de realização", "realizacao", "realização", "emissao", "emissão"],
+    carga: ["carga horaria", "carga horária", "ch", "carga", "horas", "carga horaria (h)"],
+    local: ["local", "cidade", "unidade", "local do treinamento"],
+    instrutor: ["instrutor", "facilitador", "professor", "responsavel tecnico", "responsável técnico"]
+  };
+
+  function semAcento(s) {
+    return String(s == null ? "" : s)
+      .replace(/[áàâãä]/gi, "a").replace(/[éèêë]/gi, "e").replace(/[íìîï]/gi, "i")
+      .replace(/[óòôõö]/gi, "o").replace(/[úùûü]/gi, "u").replace(/ç/gi, "c")
+      .replace(/\s+/g, " ").trim();
+  }
+
+  function motorOk() {
+    return typeof window !== "undefined" && window.XLSX && window.XLSX.read;
+  }
+
+  // Sugere, para cada campo, o cabeçalho mais provável da planilha.
+  // ATENÇÃO: o índice 0 é um resultado válido — por isso a sentinela é -1,
+  // nunca null/0 (0 é falsy e já causou mapeamento vazio).
+  function sugerirMapa(cabecalhos) {
+    var mapa = {};
+    var usados = {};
+    CAMPOS.forEach(function (campo) {
+      var sins = SINONIMOS[campo.id] || [];
+      var achou = -1;
+      var h, k;
+      // 1ª passada: igualdade exata com o nome do campo.
+      for (var i = 0; i < cabecalhos.length && achou < 0; i++) {
+        if (usados[i]) continue;
+        if (semAcento(cabecalhos[i]).toLowerCase() === campo.id) achou = i;
+      }
+      // 2ª passada: igualdade exata com um sinônimo.
+      for (var j = 0; j < cabecalhos.length && achou < 0; j++) {
+        if (usados[j]) continue;
+        h = semAcento(cabecalhos[j]).toLowerCase();
+        for (k = 0; k < sins.length; k++) {
+          if (h === semAcento(sins[k]).toLowerCase()) { achou = j; break; }
+        }
+      }
+      // 3ª passada: o cabeçalho contém o sinônimo (ou vice-versa).
+      for (var m = 0; m < cabecalhos.length && achou < 0; m++) {
+        if (usados[m]) continue;
+        h = semAcento(cabecalhos[m]).toLowerCase();
+        if (h.length < 2) continue;
+        for (k = 0; k < sins.length; k++) {
+          var s = semAcento(sins[k]).toLowerCase();
+          if (s.length >= 3 && (h.indexOf(s) >= 0 || s.indexOf(h) >= 0)) { achou = m; break; }
+        }
+      }
+      if (achou >= 0) { usados[achou] = true; mapa[campo.id] = cabecalhos[achou]; }
+      else mapa[campo.id] = "";
+    });
+    return mapa;
+  }
+
+  // Normaliza um cabeçalho vazio para um rótulo legível ("Coluna 3").
+  function rotuloColuna(h, i) {
+    var t = String(h == null ? "" : h).trim();
+    return t || "Coluna " + (i + 1);
+  }
+
+  // Converte a matriz crua do SheetJS em { cabecalhos, linhas }.
+  function matrizParaLinhas(matriz) {
+    var cabecalhos = [], linhas = [];
+    if (!matriz || !matriz.length) return { cabecalhos: cabecalhos, linhas: linhas };
+
+    // Primeira linha não vazia = cabeçalho.
+    var iCab = -1;
+    for (var i = 0; i < matriz.length; i++) {
+      var temAlgo = (matriz[i] || []).some(function (c) { return String(c == null ? "" : c).trim() !== ""; });
+      if (temAlgo) { iCab = i; break; }
+    }
+    if (iCab < 0) return { cabecalhos: cabecalhos, linhas: linhas };
+
+    cabecalhos = (matriz[iCab] || []).map(rotuloColuna);
+    // Remove cabeçalhos duplicados acrescentando sufixo, para o select funcionar.
+    var vistos = {};
+    cabecalhos = cabecalhos.map(function (h) {
+      var base = h, n = 2;
+      while (vistos[h]) { h = base + " (" + n + ")"; n++; }
+      vistos[h] = true;
+      return h;
+    });
+
+    for (var r = iCab + 1; r < matriz.length; r++) {
+      var l = matriz[r] || [];
+      var vazia = !l.some(function (c) { return String(c == null ? "" : c).trim() !== ""; });
+      if (vazia) continue;   // ignora linhas em branco
+      linhas.push(l);
+    }
+    return { cabecalhos: cabecalhos, linhas: linhas };
+  }
+
+  // Validação de CPF (dígitos verificadores). Vazio = "ausente", não "inválido".
+  function cpfValido(txt) {
+    var d = String(txt == null ? "" : txt).replace(/\D/g, "");
+    if (d.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(d)) return false;
+    var s = 0, i;
+    for (i = 0; i < 9; i++) s += Number(d[i]) * (10 - i);
+    var r1 = (s * 10) % 11; if (r1 === 10) r1 = 0;
+    if (r1 !== Number(d[9])) return false;
+    s = 0;
+    for (i = 0; i < 10; i++) s += Number(d[i]) * (11 - i);
+    var r2 = (s * 10) % 11; if (r2 === 10) r2 = 0;
+    return r2 === Number(d[10]);
+  }
+
+  function mascararCpf(v) {
+    var d = String(v == null ? "" : v).replace(/\D/g, "");
+    if (d.length !== 11) return MS.maskCpf();
+    return "***.***.***-**";
+  }
+
+  // Descobre se a célula é uma data (Date do SheetJS ou texto dd/mm/aaaa).
+  // ATENÇÃO: new Date(2026, 1, 31) NÃO falha — o JavaScript "rola" para
+  // 03/03/2026. Por isso conferimos se o dia/mês voltaram iguais ao digitado;
+  // sem isso uma data impossível (31/02) viraria um certificado com outra data.
+  function comoData(v) {
+    if (v instanceof Date && !isNaN(v.getTime())) return v;
+    var s = String(v == null ? "" : v).trim();
+    if (!s) return null;
+    var m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+    if (m) {
+      var dia = Number(m[1]), mes = Number(m[2]), ano = Number(m[3]);
+      if (ano < 100) ano += 2000;
+      if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+      var d = new Date(ano, mes - 1, dia);
+      if (isNaN(d.getTime())) return null;
+      if (d.getDate() !== dia || d.getMonth() !== mes - 1 || d.getFullYear() !== ano) return null;
+      return d;
+    }
+    var d2 = new Date(s);
+    return isNaN(d2.getTime()) ? null : d2;
+  }
+
+  function valorDa(linha, cabecalhos, nomeCabecalho) {
+    if (!nomeCabecalho) return "";
+    var i = cabecalhos.indexOf(nomeCabecalho);
+    if (i < 0) return "";
+    var v = linha[i];
+    if (v == null) return "";
+    if (v instanceof Date) return fmtDate(v);
+    return String(v).trim();
+  }
+
+  // Monta os participantes a partir das linhas reais + mapa escolhido.
+  function participantesDasLinhas() {
+    var cab = wiz.colunas;
+    return wiz.linhas.map(function (l, i) {
+      var nome = valorDa(l, cab, wiz.mapa.nome);
+      var cpfBruto = valorDa(l, cab, wiz.mapa.cpf);
+      var empresa = valorDa(l, cab, wiz.mapa.empresa);
+      var treinamento = valorDa(l, cab, wiz.mapa.treinamento);
+      var dataTxt = valorDa(l, cab, wiz.mapa.data);
+      var carga = valorDa(l, cab, wiz.mapa.carga);
+      var local = valorDa(l, cab, wiz.mapa.local);
+      var instrutor = valorDa(l, cab, wiz.mapa.instrutor);
+
+      var problemas = [];
+      if (!nome) problemas.push("Nome ausente");
+      else if (nome.replace(/\s+/g, " ").split(" ").filter(function (x) { return x.length >= 2; }).length < 2) {
+        problemas.push("Nome incompleto");
+      }
+      var soDigitos = cpfBruto.replace(/\D/g, "");
+      if (!cpfBruto) problemas.push("CPF ausente");
+      else if (!cpfValido(cpfBruto)) problemas.push("CPF inválido");
+      if (!empresa) problemas.push("Empresa ausente");
+      if (!treinamento) problemas.push("Treinamento não identificado");
+
+      return {
+        idx: i,
+        nome: nome || "— sem nome —",
+        cpf: soDigitos.length === 11 ? MS.maskCpf() : (cpfBruto ? MS.maskCpf() : ""),
+        // Guardado só em memória, durante a sessão, para emitir o certificado.
+        _cpf: cpfBruto,
+        empresa: empresa,
+        treinamento: treinamento,
+        _data: comoData(dataTxt),
+        _carga: carga,
+        local: local,
+        instrutor: instrutor,
+        status: problemas.length ? "Revisar" : "Pronto",
+        problemas: problemas,
+        arquivo: true
+      };
+    });
+  }
+
+  // Lê o File escolhido pelo usuário. Nada é enviado a lugar nenhum.
+  function lerArquivo(file, done) {
+    var nome = file.name || "";
+    var ext = (nome.split(".").pop() || "").toLowerCase();
+
+    if (EXT_ESTRUTURADA.indexOf(ext) < 0) {
+      wiz.aviso = {
+        tipo: "formato",
+        titulo: "Formato sem leitura automática",
+        texto: "Este formato poderá ser usado para extração assistida na versão completa. " +
+               "Para este teste, utilize Excel (.xlsx/.xls) ou CSV."
+      };
+      wiz.arquivo = null; wiz.encontrados = null;
+      if (done) done();
+      return;
+    }
+    if (!motorOk()) {
+      wiz.aviso = {
+        tipo: "motor",
+        titulo: "Leitor de planilhas não carregado",
+        texto: "A biblioteca de leitura (SheetJS) não carregou, provavelmente por falta de internet. " +
+               "Sem ela não é possível ler o arquivo. A leitura acontece no seu navegador — nada é enviado a servidor."
+      };
+      if (done) done();
+      return;
+    }
+
+    var leitor = new FileReader();
+    leitor.onerror = function () {
+      wiz.aviso = { tipo: "erro", titulo: "Não foi possível ler o arquivo", texto: "O navegador não conseguiu abrir o arquivo selecionado. Tente novamente." };
+      if (done) done();
+    };
+    leitor.onload = function (ev) {
+      var matriz = null;
+      try {
+        var dados = new Uint8Array(ev.target.result);
+        var wb = window.XLSX.read(dados, { type: "array", cellDates: true, raw: false });
+        var aba = wb.SheetNames && wb.SheetNames[0];
+        if (!aba) {
+          wiz.aviso = { tipo: "vazio", titulo: "A planilha está vazia", texto: "O arquivo foi lido, mas não há nenhuma aba com conteúdo." };
+          wiz.arquivo = null; wiz.encontrados = null;
+          if (done) done(); return;
+        }
+        matriz = window.XLSX.utils.sheet_to_json(wb.Sheets[aba], { header: 1, blankrows: false, defval: "" });
+        if (!matriz || !matriz.length) {
+          wiz.aviso = { tipo: "vazio", titulo: "A planilha está vazia", texto: "O arquivo foi lido, mas a primeira aba não tem nenhuma célula preenchida." };
+          wiz.arquivo = null; wiz.encontrados = null; wiz.colunas = []; wiz.linhas = [];
+          if (done) done(); return;
+        }
+      } catch (e) {
+        wiz.aviso = { tipo: "erro", titulo: "Arquivo inválido ou corrompido", texto: "Não foi possível interpretar o arquivo. Confirme se é um .xlsx, .xls ou .csv válido." };
+        wiz.arquivo = null; wiz.encontrados = null;
+        if (done) done(); return;
+      }
+
+      var res = matrizParaLinhas(matriz);
+      // Sem cabeçalho legível: nenhuma coluna nomeada, ou todas numéricas
+      // (caso típico de planilha que começa direto nos dados).
+      var soNumerico = res.cabecalhos.length > 0 && res.cabecalhos.every(function (h) {
+        return /^\d+$/.test(String(h).trim()) || /^Coluna \d+$/.test(h);
+      });
+      if (!res.cabecalhos.length || soNumerico ||
+          !res.cabecalhos.some(function (h) { return !/^Coluna \d+$/.test(h); })) {
+        wiz.aviso = { tipo: "cabecalho", titulo: "Não encontrei um cabeçalho na planilha", texto: "A primeira linha precisa conter os nomes das colunas (Nome, CPF, Empresa…). Verifique se a planilha não começa com títulos ou linhas em branco." };
+        wiz.arquivo = null; wiz.encontrados = null; wiz.colunas = []; wiz.linhas = [];
+        if (done) done(); return;
+      }
+      if (!res.linhas.length) {
+        wiz.aviso = { tipo: "vazio", titulo: "Nenhum participante encontrado", texto: "A planilha tem cabeçalho, mas nenhuma linha de dados abaixo dele." };
+        wiz.arquivo = null; wiz.encontrados = null;
+        if (done) done(); return;
+      }
+
+      var kb = file.size ? (file.size < 1024 * 1024 ? Math.max(1, Math.round(file.size / 1024)) + " KB" : (file.size / 1048576).toFixed(1) + " MB") : "—";
+      var rotulo = ext === "csv" ? "CSV — texto delimitado" : (ext === "xls" ? "Excel 97–2003 (.xls)" : "Excel (.xlsx) — planilha estruturada");
+
+      wiz.aviso = null;
+      wiz.arquivo = { nome: nome, tamanho: kb, formato: rotulo, ext: ext, linhas: res.linhas.length };
+      wiz.colunas = res.cabecalhos;
+      wiz.linhas = res.linhas;
+      wiz.mapa = sugerirMapa(res.cabecalhos);
+      wiz.encontrados = null;      // recalculado ao entrar na revisão
+      wiz.ignorados = {};
+      wiz.origem = "arquivo";
+      wiz.gerado = false;
+      if (done) done();
+    };
+    leitor.readAsArrayBuffer(file);
+  }
+
+  var EXT_ESTRUTURADA = ["xlsx", "xls", "csv"];
+  var EXT_APOIO = ["docx", "pdf", "png", "jpg", "jpeg"];
+
+  // Conjunto de participantes do arquivo fictício "participantes-nr18.xlsx".
+  // Usado SOMENTE no botão de demonstração. Se um arquivo real for escolhido,
+  // os dados reais substituem estes durante a sessão (nunca se misturam).
   function participantesDoArquivo() {
     var t = turmaPorId("t1");
     return t.participantes.map(function (p, i) {
       var problemas = p.problemas.slice();
-      // Terceiro registro da lista: problema de treinamento não identificado.
       if (i === 3) problemas.push("Treinamento não identificado");
       return {
         idx: i,
         nome: p.nome,
         cpf: p.cpf,
+        _cpf: "",
         empresa: "Construtora Horizonte",
         treinamento: problemas.indexOf("Treinamento não identificado") >= 0 ? "— não identificado —" : "NR 18",
+        _data: null,
+        _carga: "",
+        local: "",
+        instrutor: "",
         status: problemas.length ? "Revisar" : "Pronto",
-        problemas: problemas
+        problemas: problemas,
+        demo: true
       };
     });
   }
@@ -860,7 +1184,7 @@
     if (!wiz) novoWizard();
     if (parts && parts[2] === "reset") { novoWizard(); }
     // Sem arquivo processado não há o que mapear/revisar: volta para a etapa 1.
-    if (wiz.etapa > 1 && !listaEncontrados().length) wiz.etapa = 1;
+    if (wiz.etapa > 1 && !wiz.linhas.length && !listaEncontrados().length) wiz.etapa = 1;
     MS.showApp();
     MS.setCrumbs([
       { label: "Certificados", href: "certificados" },
@@ -887,28 +1211,49 @@
   }
 
   function irPara(n) {
-    if (n > 1 && !listaEncontrados().length) {
+    if (n > 1 && !wiz.linhas.length && !(wiz.encontrados || []).length) {
       MS.showToast("Envie a lista de participantes para continuar.");
       wiz.etapa = 1;
     } else {
+      if (n > 2 && !wiz.mapa.nome) {
+        MS.showToast("Indique qual coluna da planilha traz o nome do participante.");
+        n = 2;
+      }
+      // Os participantes são derivados das linhas + mapa. Só recalcula quando
+      // ainda não existem — assim as correções feitas na etapa 3 não se perdem.
+      if (n > 2 && !listaEncontrados().length) wiz.encontrados = participantesDasLinhas();
       wiz.etapa = Math.min(5, Math.max(1, n));
     }
     renderImportar();
     if (window.scrollTo) window.scrollTo(0, 0);
   }
 
-  /* ---- Etapa 1: enviar arquivo ---- */
+  /* ---- Etapa 1: enviar arquivo (leitura REAL, local) ---- */
+  function avisoHtml() {
+    if (!wiz.aviso) return "";
+    return '<div class="upload-erro upload-erro--' + esc(wiz.aviso.tipo) + '">' +
+      '<strong>' + esc(wiz.aviso.titulo) + '</strong><p>' + esc(wiz.aviso.texto) + "</p></div>";
+  }
+
   function etapaUpload() {
+    var n = wiz.linhas ? wiz.linhas.length : 0;
+    // Prévia da leitura: derivada das linhas reais, sem depender da etapa 3.
+    var previa = (wiz.origem === "arquivo" && n) ? participantesDasLinhas() : (wiz.encontrados || []);
     return (
-      '<div class="card rv"><div class="card__head"><h3>1. Enviar a lista de participantes</h3></div>' +
+      '<div class="card rv"><div class="card__head"><h3>1. Enviar a lista de participantes</h3>' +
+      '<span class="card__head-sub">A leitura acontece no seu navegador</span></div>' +
       '<div class="card__pad">' +
 
-      '<div class="upload-zone upload-zone--big" data-upload-zone>' +
+      '<div class="upload-zone upload-zone--big" data-upload-zone tabindex="0" role="button" ' +
+      'aria-label="Escolher planilha de participantes">' +
       '<div class="upload-zone__icon">' + ico("upload") + "</div>" +
       '<div class="upload-zone__title">Arraste o arquivo aqui</div>' +
       '<div class="upload-zone__sub">ou toque para selecionar no computador ou no celular</div>' +
-      '<button class="btn btn--primary btn--sm" type="button" data-action="simular-arquivo">' +
-      (wiz.arquivo ? "Escolher outro arquivo" : "Selecionar arquivo") + "</button>" +
+      '<button class="btn btn--primary btn--sm" type="button" data-action="escolher-arquivo">' +
+      (wiz.arquivo ? "Escolher outro arquivo" : "Escolher arquivo") + "</button>" +
+      '<input type="file" id="cert-file" class="upload-input" ' +
+      'accept=".xlsx,.xls,.csv,.docx,.pdf,.png,.jpg,.jpeg" ' +
+      'aria-hidden="true" tabindex="-1" />' +
       '<div class="upload-zone__tipos">' +
       '<span class="tipo tipo--ideal">.xlsx</span><span class="tipo tipo--ideal">.xls</span>' +
       '<span class="tipo tipo--ideal">.csv</span>' +
@@ -916,73 +1261,86 @@
       '<span class="tipo">.png</span><span class="tipo">.jpg</span><span class="tipo">.jpeg</span>' +
       "</div></div>" +
 
+      avisoHtml() +
+
       '<div class="aviso-import">' +
       '<strong>Sobre os formatos aceitos</strong>' +
-      "<p><strong>Excel (.xlsx/.xls) e CSV (.csv) são os formatos ideais</strong> para importação em lote: as colunas são lidas de forma estruturada e o mapeamento é direto.</p>" +
-      "<p><strong>Word (.docx), PDF (.pdf) e imagens (.png/.jpg/.jpeg) são documentos de apoio.</strong> " +
-      "Eles podem ser anexados à turma, mas <strong>não há garantia de leitura automática perfeita</strong>: " +
-      "nesses casos o sistema faz uma extração preliminar e <strong>exige a etapa de revisão</strong> antes de gerar qualquer certificado — " +
-      "ou o preenchimento manual dos participantes.</p>" +
+      "<p><strong>Excel (.xlsx/.xls) e CSV (.csv) têm importação automática:</strong> as colunas são lidas de forma estruturada, " +
+      "você confere o mapeamento e revisa os participantes antes de gerar.</p>" +
+      "<p><strong>Word (.docx), PDF (.pdf) e imagens (.png/.jpg/.jpeg) não têm leitura automática nesta versão.</strong> " +
+      "O arquivo é aceito, mas o sistema avisa que a extração assistida ainda não está disponível — " +
+      "nesses casos, use Excel ou CSV para importar a lista.</p>" +
       "</div>" +
 
       (wiz.arquivo
         ? '<div class="arquivo-ok"><div class="arquivo-ok__ico">' + ico("table") + "</div>" +
           '<div class="arquivo-ok__b"><strong>' + esc(wiz.arquivo.nome) + "</strong>" +
           '<span class="arquivo-ok__meta">' + esc(wiz.arquivo.tamanho) + " · " + esc(wiz.arquivo.formato) + "</span>" +
-          '<span class="status status--concluido">Arquivo processado</span>' +
-          '<span class="arquivo-ok__found">Encontrados: <strong>' + wiz.encontrados.length + " participantes</strong></span></div>" +
-          '<button class="btn btn--light btn--sm" data-remover-arquivo>Remover</button></div>' +
+          '<span class="status status--concluido">Arquivo lido no navegador</span>' +
+          '<span class="arquivo-ok__found">Encontrados: <strong>' + n + " participantes</strong> em " +
+          wiz.colunas.length + " colunas</span></div>" +
+          '<button class="btn btn--light btn--sm" data-action="remover-arquivo">Remover</button></div>' +
 
           '<div class="table-wrap table-cards" style="margin-top:16px"><table class="table"><thead><tr>' +
-          "<th>☑</th><th>Nome</th><th>CPF</th><th>Empresa</th><th>Treinamento</th><th>Status</th></tr></thead><tbody>" +
-          wiz.encontrados.slice(0, 3).map(function (p) {
-            return "<tr><td data-l=''><span class='chk-ok'>☑</span></td>" +
+          "<th>Nome</th><th>CPF</th><th>Empresa</th><th>Treinamento</th><th>Status</th></tr></thead><tbody>" +
+          previa.slice(0, 3).map(function (p) {
+            return '<tr>' +
               '<td data-l="Nome" class="cell-strong">' + esc(p.nome) + "</td>" +
               '<td data-l="CPF">' + esc(p.cpf || "—") + "</td>" +
-              '<td data-l="Empresa">' + esc(p.empresa) + "</td>" +
-              '<td data-l="Treinamento">' + esc(p.treinamento) + "</td>" +
+              '<td data-l="Empresa">' + esc(p.empresa || "—") + "</td>" +
+              '<td data-l="Treinamento">' + esc(p.treinamento || "—") + "</td>" +
               '<td data-l="Status"><span class="status ' + (p.status === "Pronto" ? "status--active" : "status--review") + '">' + p.status + "</span></td></tr>";
           }).join("") +
-          '<tr><td colspan="6" class="table-more">+ ' + (wiz.encontrados.length - 3) + " outros participantes encontrados no arquivo</td></tr>" +
+          (n > 3 ? '<tr><td colspan="5" class="table-more">+ ' + (n - 3) + " outros participantes encontrados no arquivo</td></tr>" : "") +
           "</tbody></table></div>"
+
         : '<div class="demo-note">' +
-          "<strong>Demonstração:</strong> ao clicar em <em>Selecionar arquivo</em>, o sistema simula a leitura do arquivo " +
-          "<code>participantes-nr18.xlsx</code>. <strong>Nenhum arquivo é enviado a servidor nesta etapa</strong> — " +
-          "os participantes exibidos são fictícios e servem para demonstrar o fluxo de revisão.</div>") +
+          "<strong>Como testar:</strong> clique em <em>Escolher arquivo</em> (ou arraste a planilha para a área acima). " +
+          "O arquivo é lido <strong>dentro do seu navegador</strong> — ele <strong>não é enviado a nenhum servidor</strong>, " +
+          "nem para a biblioteca que faz a leitura. Nada fica salvo depois que você recarregar a página.</div>") +
 
       "</div></div>" +
 
       '<div class="wizard-foot">' +
       '<button class="btn btn--light" data-action="cert-voltar">Cancelar</button>' +
+      '<button class="btn btn--light" data-action="carregar-demo">Ver exemplo com dados fictícios</button>' +
       '<button class="btn btn--primary" data-action="wiz-mapear"' + (wiz.arquivo ? "" : " disabled") + ">Mapear colunas</button>" +
       "</div>"
     );
   }
 
-  /* ---- Etapa 2: mapear colunas ---- */
-  var DESTINOS = ["Nome do participante", "CPF", "Empresa", "Treinamento", "Data do treinamento",
-    "Carga horária", "Local", "Instrutor", "Observações", "Ignorar esta coluna"];
-
+  /* ---- Etapa 2: mapear colunas (a partir dos cabeçalhos REAIS) ---- */
   function etapaMapear() {
+    var cab = wiz.colunas;
     return (
       '<div class="card rv"><div class="card__head"><h3>2. Mapear as colunas da planilha</h3>' +
-      '<span class="card__head-sub">' + esc(wiz.arquivo ? wiz.arquivo.nome : "participantes-nr18.xlsx") + "</span></div>" +
+      '<span class="card__head-sub">' + esc(wiz.arquivo ? wiz.arquivo.nome : "—") + "</span></div>" +
       '<div class="card__pad">' +
-      '<p class="modal__hint">Confirme qual coluna do arquivo corresponde a cada informação do certificado. ' +
-      "O mapeamento sugerido já vem preenchido — ajuste se a planilha do cliente tiver outro cabeçalho.</p>" +
+      '<p class="modal__hint">Estas são as colunas que o sistema <strong>encontrou no seu arquivo</strong>. ' +
+      "O mapeamento sugerido já vem preenchido — troque se o cabeçalho da planilha do cliente for diferente. " +
+      "<strong>Nome é obrigatório</strong>; os outros campos podem ser corrigidos ou completados depois.</p>" +
       '<div class="mapear">' +
-      '<div class="mapear__head"><span>Coluna no arquivo</span><span></span><span>Campo no certificado</span></div>' +
-      wiz.colunas.map(function (c, i) {
-        return '<div class="mapear__row">' +
-          '<span class="mapear__origem">' + esc(c.origem) + "</span>" +
-          '<span class="mapear__seta">→</span>' +
-          '<select class="field__input mapear__sel" data-mapear="' + i + '">' +
-          DESTINOS.map(function (d) { return '<option' + (d === c.destino ? " selected" : "") + ">" + esc(d) + "</option>"; }).join("") +
+      '<div class="mapear__head"><span>Campo do sistema</span><span></span><span>Coluna da planilha</span></div>' +
+      CAMPOS.map(function (campo) {
+        var atual = wiz.mapa[campo.id] || "";
+        return '<div class="mapear__row' + (campo.obrigatorio && !atual ? " mapear__row--falta" : "") + '">' +
+          '<span class="mapear__origem">' + esc(campo.rotulo) +
+          (campo.obrigatorio ? ' <em class="mapear__req">obrigatório</em>' : "") + "</span>" +
+          '<span class="mapear__seta">←</span>' +
+          '<select class="field__input mapear__sel" data-campo="' + campo.id + '">' +
+          '<option value=""' + (atual ? "" : " selected") + ">— não usar —</option>" +
+          cab.map(function (h) {
+            return '<option value="' + esc(h) + '"' + (h === atual ? " selected" : "") + ">" + esc(h) + "</option>";
+          }).join("") +
           "</select></div>";
       }).join("") +
       "</div>" +
-      '<button class="btn btn--light btn--sm" data-toast-action="Mapeamento salvo para reutilização — demonstração visual." ' +
-      'style="margin-top:12px">Salvar mapeamento para as próximas importações</button>' +
+      (wiz.mapa.nome ? "" : '<div class="upload-erro upload-erro--formato"><strong>Falta indicar a coluna do Nome</strong>' +
+        "<p>Sem a coluna de nome não é possível montar a lista de participantes. Escolha qual coluna da planilha traz o nome.</p></div>") +
+      '<div class="mapear__amostra"><span class="mapear__amostra__l">Prévia da 1ª linha do arquivo</span>' +
+      '<div class="mapear__amostra__v">' + cab.map(function (h) {
+        return "<span><em>" + esc(h) + ":</em> " + esc(String(valorDa(wiz.linhas[0] || [], cab, h) || "—")) + "</span>";
+      }).join("") + "</div></div>" +
       "</div></div>" +
       '<div class="wizard-foot">' +
       '<button class="btn btn--light" data-action="wiz-voltar">Voltar</button>' +
@@ -991,42 +1349,71 @@
     );
   }
 
-  /* ---- Etapa 3: revisão ---- */
+  /* ---- Etapa 3: revisão (lista REAL, CPF mascarado) ---- */
   function etapaRevisar() {
+    var lista = listaEncontrados();
     var pr = prontos().length, rv = aRevisar().length;
-    var lista = aRevisar();
+    var ativos = lista.filter(function (p) { return !wiz.ignorados[p.idx]; });
     return (
       '<div class="card rv"><div class="card__head"><h3>3. Revisar antes de gerar</h3>' +
       '<span class="card__head-sub">Nada é gerado sem passar por aqui</span></div>' +
       '<div class="card__pad">' +
       '<div class="rev-resumo">' +
-      '<div class="rev-resumo__i"><span class="rev-resumo__n">' + wiz.encontrados.length + '</span><span class="rev-resumo__l">participantes encontrados</span></div>' +
+      '<div class="rev-resumo__i"><span class="rev-resumo__n">' + lista.length + '</span><span class="rev-resumo__l">participantes lidos do arquivo</span></div>' +
       '<div class="rev-resumo__i rev-resumo__i--ok"><span class="rev-resumo__n">' + pr + '</span><span class="rev-resumo__l">prontos para emitir</span></div>' +
       '<div class="rev-resumo__i' + (rv ? " rev-resumo__i--warn" : "") + '"><span class="rev-resumo__n">' + rv + '</span><span class="rev-resumo__l">precisam de revisão</span></div>' +
       "</div>" +
 
+      '<div class="table-wrap table-cards" style="margin-top:16px"><table class="table"><thead><tr>' +
+      "<th>Nome</th><th>CPF</th><th>Empresa</th><th>Treinamento</th><th>Status</th><th>Ações</th></tr></thead><tbody>" +
+      ativos.map(function (p) {
+        var revisar = p.problemas.length > 0;
+        return "<tr" + (revisar ? ' class="row-revisar"' : "") + ">" +
+          '<td data-l="Nome" class="cell-strong">' + esc(p.nome) + "</td>" +
+          '<td data-l="CPF">' + esc(p.cpf || "— não informado —") + "</td>" +
+          '<td data-l="Empresa">' + esc(p.empresa || "—") + "</td>" +
+          '<td data-l="Treinamento">' + esc(p.treinamento || "—") + "</td>" +
+          '<td data-l="Status"><span class="status ' + (revisar ? "status--review" : "status--active") + '">' +
+          (revisar ? "Revisar" : "Pronto") + "</span></td>" +
+          '<td data-l="Ações"><div class="row-actions">' +
+          '<button class="link-btn" data-action="wiz-corrigir" data-idx="' + p.idx + '">Corrigir</button>' +
+          '<button class="link-btn link-btn--muted" data-action="wiz-ignorar" data-idx="' + p.idx + '">Ignorar</button>' +
+          "</div></td></tr>";
+      }).join("") +
+      "</tbody></table></div>" +
+
       (rv
-        ? '<div class="rev-lista">' + lista.map(function (p) {
+        ? '<div class="rev-lista">' + aRevisar().map(function (p) {
             return '<div class="rev-item">' +
               '<div class="rev-item__top"><div class="rev-item__b">' +
               "<strong>" + esc(p.nome) + "</strong>" +
-              '<span>' + esc(p.empresa) + " · " + esc(p.treinamento) + " · CPF " + esc(p.cpf || "não informado") + "</span></div>" +
+              '<span>' + esc(p.empresa || "empresa não informada") + " · " + esc(p.treinamento || "treinamento não identificado") +
+              " · CPF " + esc(p.cpf ? "mascarado" : "não informado") + " (linha " + (p.idx + 2) + ")</span></div>" +
               '<span class="status status--review">Revisar</span></div>' +
               '<div class="rev-item__probs">' + p.problemas.map(function (x) { return '<span class="prob">' + esc(x) + "</span>"; }).join("") + "</div>" +
               '<div class="rev-item__acoes">' +
               '<button class="btn btn--light btn--sm" data-action="wiz-editar" data-idx="' + p.idx + '">Editar</button>' +
-              '<button class="btn btn--light btn--sm" data-action="wiz-ignorar" data-idx="' + p.idx + '">Ignorar participante</button>' +
               '<button class="btn btn--ghost btn--sm" data-action="wiz-corrigir" data-idx="' + p.idx + '">Corrigir informação</button>' +
+              '<button class="btn btn--light btn--sm" data-action="wiz-ignorar" data-idx="' + p.idx + '">Ignorar participante</button>' +
               "</div></div>";
           }).join("") + "</div>"
         : '<div class="rev-ok"><span class="rev-ok__ico">✓</span><div><strong>Todos os participantes estão prontos para emissão.</strong>' +
-          "<span>Nenhum problema encontrado nos dados importados.</span></div></div>") +
+          "<span>Nenhum problema encontrado nos dados lidos do arquivo.</span></div></div>") +
+
+      (Object.keys(wiz.ignorados).filter(function (k) { return wiz.ignorados[k]; }).length
+        ? '<div class="demo-note" style="margin-top:14px"><strong>' +
+          Object.keys(wiz.ignorados).filter(function (k) { return wiz.ignorados[k]; }).length +
+          " participante(s) ignorado(s)</strong> — não receberão certificado. " +
+          '<button class="link-btn" data-action="reativar-ignorados">Reativar todos</button></div>'
+        : "") +
 
       '<div class="aviso-import aviso-import--soft">' +
       "<strong>Por que esta etapa existe</strong>" +
       "<p>Planilhas chegam com CPF ausente, nome incompleto ou treinamento não identificado. " +
-      "O sistema <strong>não emite certificados cegamente</strong>: ele separa o que está pronto do que precisa de conferência humana " +
-      "e só gera depois da sua decisão.</p>" +
+      "O sistema <strong>não emite certificados cegamente</strong> e <strong>não descarta ninguém por um campo faltando</strong>: " +
+      "ele separa o que está pronto do que precisa de conferência humana e só gera depois da sua decisão.</p>" +
+      "<p>O CPF aparece mascarado nesta lista. O número completo fica somente na memória desta aba, durante a sessão, " +
+      "para poder constar no certificado — não é gravado em banco, <em>localStorage</em> nem enviado a servidor.</p>" +
       "</div>" +
       "</div></div>" +
       '<div class="wizard-foot">' +
@@ -1036,15 +1423,54 @@
     );
   }
 
-  /* ---- Etapa 4: configurar ---- */
+  /* ---- Etapa 4: configurar (defaults da turma, herdando o que veio da planilha) ---- */
+  // Aplica como padrão da turma os valores que o próprio arquivo trouxe.
+  function herdarDaPlanilha() {
+    if (!wiz || wiz.origem !== "arquivo" || wiz.herdado) return;
+    var base = (wiz.encontrados || []).filter(function (p) { return p.status === "Pronto"; })[0] ||
+               (wiz.encontrados || [])[0];
+    if (!base) return;
+    var cfg = wiz.config;
+    if (base.empresa) {
+      var achou = MS.CLIENTES.filter(function (c) {
+        return semAcento(c.nome).toLowerCase() === semAcento(base.empresa).toLowerCase();
+      })[0];
+      if (achou) cfg.empresa = achou.nome; else cfg.empresaLivre = base.empresa;
+    }
+    if (base._data) cfg.data = base._data;
+    if (base._carga) cfg.cargaHoraria = base._carga;
+    if (base.local) cfg.local = base.local;
+    if (base.instrutor && INSTRUTORES.indexOf(base.instrutor) >= 0) cfg.instrutor = base.instrutor;
+    if (base.treinamento) {
+      var alvo = semAcento(base.treinamento).toLowerCase();
+      var t = TREINAMENTOS.filter(function (x) {
+        return semAcento(x.nr).toLowerCase() === alvo ||
+               semAcento(x.nome).toLowerCase() === alvo ||
+               alvo.indexOf(semAcento(x.nr).toLowerCase()) >= 0;
+      })[0];
+      if (t) cfg.treinamentoId = t.id;
+    }
+    wiz.herdado = true;
+  }
+
   function etapaConfigurar() {
+    herdarDaPlanilha();
     var cfg = wiz.config;
     var tr = treinamentoPorId(cfg.treinamentoId);
-    var exemplo = prontos()[0] || { nome: "Participante da turma", cpf: "***.***.***-**" };
+    var exemplo = prontos()[0] || { nome: "Participante da turma", cpf: MS.maskCpf() };
+    var empresas = MS.CLIENTES.map(function (c) { return c.nome; });
+    if (cfg.empresaLivre && empresas.indexOf(cfg.empresaLivre) < 0) empresas.unshift(cfg.empresaLivre);
     return (
       '<div class="card rv"><div class="card__head"><h3>4. Configurar os certificados</h3>' +
       '<span class="card__head-sub">' + prontos().length + " certificados serão gerados</span></div>" +
       '<div class="card__pad">' +
+      (wiz.origem === "arquivo" && wiz.herdado && (wiz.mapa.empresa || wiz.mapa.data || wiz.mapa.carga)
+        ? '<div class="demo-note" style="margin-bottom:14px"><strong>Valores vindos da planilha:</strong> ' +
+          "os campos abaixo já foram preenchidos com o que o arquivo trazia" +
+          (wiz.mapa.data ? " (data" : "") + (wiz.mapa.carga ? ", carga horária" : "") + (wiz.mapa.empresa ? ", empresa" : "") +
+          (wiz.mapa.data || wiz.mapa.carga || wiz.mapa.empresa ? ")" : "") +
+          ". Ajuste se precisar — o que você definir aqui é o que vai para todos os certificados.</div>"
+        : "") +
       '<div class="grid-2 cfg-grid">' +
       '<div class="form-grid">' +
       '<label class="field"><span class="field__label">Treinamento</span>' +
@@ -1054,11 +1480,11 @@
       }).join("") + "</select></label>" +
       '<label class="field"><span class="field__label">Empresa</span>' +
       '<select class="field__input" id="cfg-empresa">' +
-      MS.CLIENTES.map(function (c) { return '<option' + (c.nome === cfg.empresa ? " selected" : "") + ">" + esc(c.nome) + "</option>"; }).join("") +
+      empresas.map(function (n) { return '<option' + (n === cfg.empresa ? " selected" : "") + ">" + esc(n) + "</option>"; }).join("") +
       "</select></label>" +
       '<div class="form-row-2">' +
       '<label class="field"><span class="field__label">Data</span><input class="field__input" id="cfg-data" value="' + fmtDate(cfg.data) + '" /></label>' +
-      '<label class="field"><span class="field__label">Carga horária</span><input class="field__input" id="cfg-carga" value="' + cfg.cargaHoraria + '" /></label>' +
+      '<label class="field"><span class="field__label">Carga horária</span><input class="field__input" id="cfg-carga" value="' + esc(cfg.cargaHoraria) + '" /></label>' +
       "</div>" +
       '<div class="form-row-2">' +
       '<label class="field"><span class="field__label">Instrutor</span><select class="field__input" id="cfg-instrutor">' +
@@ -1073,17 +1499,23 @@
         return '<option' + (m === cfg.modelo ? " selected" : "") + ">" + esc(m) + "</option>";
       }).join("") + "</select></label>" +
       "</div>" +
+      '<button class="btn btn--light btn--sm" type="button" data-action="cfg-atualizar" style="justify-self:start">Atualizar pré-visualização</button>' +
       '<div class="card" style="padding:12px 14px;background:var(--green-50);border-color:var(--green-100);font-size:.84rem">' +
       "Validade definida pela norma: <strong>" + esc(tr.nr !== "—" ? tr.nr : tr.nome) + " — " + tr.validadeMeses + " meses</strong>. " +
       "O vencimento entra automaticamente no histórico e nos alertas.</div>" +
       "</div>" +
 
       '<div class="cfg-preview"><span class="cfg-preview__label">Pré-visualização</span>' +
-      previewCertificado({
+      '<div id="cfg-preview">' + previewCertificado({
         participante: exemplo.nome, cpf: exemplo.cpf, empresa: cfg.empresa, treinamento: tr.nome, nr: tr.nr,
         cargaHoraria: cfg.cargaHoraria, data: cfg.data, local: cfg.local,
-        instrutor: cfg.instrutor, responsavel: cfg.responsavel, codigo: "MS-2026-" + String(prontos().length).padStart(5, "0")
-      }) +
+        // Mesma validade que gerarEmLote() vai gravar — o preview não pode
+        // prometer uma data que o certificado gerado não terá.
+        validade: validadeDe(cfg.data, cfg.treinamentoId),
+        instrutor: cfg.instrutor, responsavel: cfg.responsavel,
+        modelo: cfg.modelo,
+        codigo: "MS-" + cfg.data.getFullYear() + "-L" + String(1).padStart(4, "0")
+      }) + "</div>" +
       "</div>" +
       "</div></div></div>" +
       '<div class="wizard-foot">' +
@@ -1093,39 +1525,77 @@
     );
   }
 
-  /* ---- Etapa 5: geração em lote ---- */
+  // Lê os campos da etapa 4 e devolve a config atualizada (o formulário manda).
+  function lerConfig() {
+    var g = function (id) { var e = document.getElementById(id); return e ? e.value : null; };
+    var cfg = wiz.config;
+    var vT = g("cfg-treinamento"); if (vT) cfg.treinamentoId = vT;
+    var vE = g("cfg-empresa"); if (vE) cfg.empresa = vE;
+    var vD = g("cfg-data");
+    if (vD) { var d = comoData(vD); if (d) cfg.data = d; }
+    var vC = g("cfg-carga"); if (vC) cfg.cargaHoraria = vC;
+    var vI = g("cfg-instrutor"); if (vI) cfg.instrutor = vI;
+    var vR = g("cfg-resp"); if (vR) cfg.responsavel = vR;
+    var vL = g("cfg-local"); if (vL !== null) cfg.local = vL;
+    var vM = g("cfg-modelo"); if (vM) cfg.modelo = vM;
+    return cfg;
+  }
+
+  // Repinta só o preview da etapa 4 (sem recarregar a tela inteira).
+  function repintarPreviewConfig() {
+    var cfg = lerConfig();
+    var tr = treinamentoPorId(cfg.treinamentoId);
+    var exemplo = prontos()[0] || { nome: "Participante da turma", cpf: MS.maskCpf() };
+    var alvo = document.getElementById("cfg-preview");
+    if (!alvo) return;
+    alvo.innerHTML = previewCertificado({
+      participante: exemplo.nome, cpf: exemplo.cpf, empresa: cfg.empresa, treinamento: tr.nome, nr: tr.nr,
+      cargaHoraria: cfg.cargaHoraria, data: cfg.data, local: cfg.local,
+      validade: validadeDe(cfg.data, cfg.treinamentoId),
+      instrutor: cfg.instrutor, responsavel: cfg.responsavel, modelo: cfg.modelo,
+      codigo: "MS-" + cfg.data.getFullYear() + "-L0001"
+    });
+  }
+
+  /* ---- Etapa 5: geração em lote (na sessão) ---- */
   function etapaGerar() {
     if (!wiz.gerado) {
+      lerConfig();
       wiz.gerado = gerarEmLote();
     }
     var lista = wiz.gerado;
+    var tr = treinamentoPorId(wiz.config.treinamentoId);
     return (
-      '<div class="card rv"><div class="card__head"><h3>5. Certificados preparados</h3>' +
-      '<span class="status status--concluido">✓ ' + lista.length + " certificados preparados</span></div>" +
+      '<div class="card rv"><div class="card__head"><h3>5. Certificados gerados</h3>' +
+      '<span class="status status--concluido">✓ ' + lista.length + " certificados gerados</span></div>" +
       '<div class="card__pad">' +
       '<div class="rev-ok"><span class="rev-ok__ico">✓</span><div>' +
-      "<strong>" + lista.length + " certificados preparados</strong>" +
-      "<span>" + esc(wiz.config.empresa) + " · " + esc(treinamentoPorId(wiz.config.treinamentoId).nome) + " · " + fmtDate(wiz.config.data) + "</span></div></div>" +
+      "<strong>" + lista.length + " certificado(s) gerado(s) nesta sessão</strong>" +
+      "<span>" + esc(wiz.config.empresa) + " · " + esc(tr.nome) + " · " + fmtDate(wiz.config.data) +
+      " · carga de " + esc(wiz.config.cargaHoraria) + "h</span></div></div>" +
       '<div class="table-wrap table-cards" style="margin-top:16px"><table class="table"><thead><tr>' +
       "<th>Participante</th><th>Treinamento</th><th>Código</th><th>Ações</th></tr></thead><tbody>" +
       lista.map(function (c) {
-        return '<tr><td data-l="Participante" class="cell-strong">' + esc(c.participante) + "</td>" +
+        return '<tr><td data-l="Participante" class="cell-strong">' + esc(c.participante) +
+          '<span class="cell-sub">' + esc(mascaraDoCert(c)) + "</span></td>" +
           '<td data-l="Treinamento">' + esc(c.nr !== "—" ? c.nr : c.treinamento) + "</td>" +
           '<td data-l="Código">' + esc(c.codigo) + "</td>" +
           '<td data-l="Ações"><div class="row-actions">' +
           '<button class="link-btn" data-action="cert-ver" data-cert="' + c.id + '">Visualizar</button>' +
-          '<button class="link-btn" data-toast-action="Download do certificado — demonstração visual.">Baixar</button>' +
+          '<button class="link-btn" data-action="cert-imprimir" data-cert="' + c.id + '">Imprimir / Salvar PDF</button>' +
           "</div></td></tr>";
       }).join("") +
       "</tbody></table></div>" +
       '<div class="lote-acoes">' +
-      '<button class="btn btn--primary" data-toast-action="Download de todos os certificados — demonstração visual.">Baixar todos</button>' +
-      '<button class="btn btn--light" data-toast-action="Exportação em ZIP — demonstração visual.">Exportar ZIP</button>' +
-      '<button class="btn btn--light" data-toast-action="PDF único com todos os certificados — demonstração visual.">Gerar PDF único</button>' +
+      '<button class="btn btn--primary" data-action="cert-imprimir-lote" data-lote="' + lista.length + '">Imprimir todos (1 por folha)</button>' +
+      '<button class="btn btn--light" data-action="cert-historico">Ver no histórico</button>' +
       "</div>" +
       '<div class="demo-note">' +
-      "<strong>Demonstração:</strong> os certificados acima existem na memória desta apresentação. " +
-      "A geração real de PDF, o ZIP e o download serão implementados na versão final, com backend.</div>" +
+      "<strong>O que já é real:</strong> os " + lista.length + " certificados acima foram gerados de verdade a partir " +
+      "dos dados " + (wiz.origem === "arquivo" ? "do seu arquivo" : "fictícios desta demonstração") +
+      ", e cada um pode ser visualizado e impresso/salvo em PDF em A4. " +
+      "<strong>O que ainda é demonstrativo:</strong> o QR Code é estrutural, e o ZIP / PDF único em arquivo " +
+      "(sem passar pela impressão do navegador) entram na versão com backend.</div>" +
       "</div></div>" +
       '<div class="wizard-foot">' +
       '<button class="btn btn--light" data-action="cert-historico">Ver no histórico</button>' +
@@ -1134,22 +1604,70 @@
     );
   }
 
-  // Cria os certificados do lote a partir dos participantes prontos.
+  // CPF sempre mascarado nas LISTAS (o valor completo só existe em memória).
+  function mascaraDoCert(c) {
+    return c.cpf && c.cpf.indexOf("*") < 0 ? MS.maskCpf() : (c.cpf || "CPF não informado");
+  }
+
+  /* ---- Impressão: clona SÓ o certificado para #print-area e chama print() ---- */
+  function garantirAreaImpressao() {
+    var area = document.getElementById("print-area");
+    if (!area) {
+      area = document.createElement("div");
+      area.id = "print-area";
+      document.body.appendChild(area);
+    }
+    return area;
+  }
+
+  function cfgDoCert(c) {
+    return {
+      participante: c.participante, cpf: c.cpf || MS.maskCpf(),
+      empresa: c.empresaNome || empresaDe(c), treinamento: c.treinamento, nr: c.nr,
+      cargaHoraria: c.cargaHoraria, data: c.emissao, local: c.local,
+      // A validade acompanha o certificado até o papel. Ela já vinha sendo
+      // calculada (validadeDe) e mostrada no histórico; faltava no documento.
+      validade: c.validade,
+      instrutor: c.instrutor, responsavel: c.responsavel,
+      modelo: c.modelo, codigo: c.codigo
+    };
+  }
+
+  function imprimirLista(certs, titulo) {
+    if (!certs.length) { MS.showToast("Nenhum certificado para imprimir."); return; }
+    var area = garantirAreaImpressao();
+    area.innerHTML = certs.map(function (c) { return previewCertificado(cfgDoCert(c)); }).join("");
+    var antes = document.title;
+    document.title = titulo || ("Certificado " + certs[0].codigo);
+    MS.showToast(certs.length > 1
+      ? "Abrindo a impressão de " + certs.length + " certificados — escolha “Salvar como PDF” para gerar o arquivo."
+      : "Abrindo a impressão — escolha “Salvar como PDF” para gerar o arquivo.");
+    setTimeout(function () {
+      try { window.print(); } finally { document.title = antes; }
+    }, 120);
+  }
+
+  // Cria, NA SESSÃO, um certificado para cada participante pronto da turma.
+  // Nada é gravado em servidor: os objetos vivem na memória desta aba.
   function gerarEmLote() {
     var cfg = wiz.config;
     var tr = treinamentoPorId(cfg.treinamentoId);
     var empresa = MS.CLIENTES.filter(function (c) { return c.nome === cfg.empresa; })[0];
+    var lote = Date.now();
     var out = [];
     prontos().forEach(function (p, i) {
       var c = {
-        id: "lote-" + Date.now() + "-" + i,
+        id: "lote-" + lote + "-" + i,
         codigo: "MS-" + cfg.data.getFullYear() + "-L" + String(i + 1).padStart(4, "0"),
         participante: p.nome,
-        cpf: p.cpf || MS.maskCpf(),
+        // No certificado vai o CPF completo quando disponível; na LISTA ele
+        // continua mascarado. Guardado apenas na memória desta sessão.
+        cpf: p._cpf ? p._cpf : MS.maskCpf(),
         treinamentoId: cfg.treinamentoId,
         nr: tr.nr,
         treinamento: tr.nome,
         clienteId: empresa ? empresa.id : "c5",
+        empresaNome: cfg.empresa,
         obraId: empresa && empresa.obras[0] ? empresa.obras[0].id : "o9",
         turmaId: null,
         emissao: cfg.data,
@@ -1159,14 +1677,15 @@
         responsavel: cfg.responsavel,
         local: cfg.local,
         modelo: cfg.modelo,
-        status: "Preparado (demonstração)",
+        status: "Preparado nesta sessão",
         problemas: [],
-        demo: true
+        origem: wiz.origem === "arquivo" ? "arquivo" : "demo",
+        demo: wiz.origem !== "arquivo"
       };
       CERTIFICADOS.push(c);
       out.push(c);
     });
-    MS.showToast(out.length + " certificados preparados. A geração real de arquivos será feita na versão final.");
+    MS.showToast(out.length + " certificado(s) gerado(s) nesta sessão. Use Visualizar para imprimir ou salvar em PDF.");
     return out;
   }
 
@@ -1184,7 +1703,9 @@
       '<div class="card__pad"><div class="form-grid">' +
       '<label class="field"><span class="field__label">Nome completo</span><input class="field__input" id="ci-nome" value="Mariana Alves Correia" /></label>' +
       '<div class="form-row-2">' +
-      '<label class="field"><span class="field__label">CPF</span><input class="field__input" id="ci-cpf" value="***.***.***-**" /></label>' +
+      // CPF começa VAZIO (com dica): se viesse pré-preenchido com a máscara,
+      // a máscara iria parar dentro do certificado impresso.
+      '<label class="field"><span class="field__label">CPF</span><input class="field__input" id="ci-cpf" value="" inputmode="numeric" placeholder="000.000.000-00" /></label>' +
       '<label class="field"><span class="field__label">Empresa</span><select class="field__input" id="ci-empresa">' +
       MS.CLIENTES.map(function (c) { return "<option>" + esc(c.nome) + "</option>"; }).join("") + "</select></label>" +
       "</div>" +
@@ -1211,27 +1732,39 @@
       '<div class="demo-note">CPF exibido mascarado nesta demonstração. Os dados são fictícios.</div>' +
       "</div></div></div>" +
       '<div class="card rv"><div class="card__head"><h3>Pré-visualização</h3></div>' +
-      '<div class="card__pad cert-preview-wrap" id="ci-preview">' + previewIndividual() + "</div></div>" +
+      '<div class="card__pad cert-preview-wrap" id="ci-preview"></div></div>' +
       "</div>"
     );
+    // A pré-visualização é montada DEPOIS que os campos existem no DOM — do
+    // contrário ela não enxergaria os valores do formulário e cairia nos
+    // padrões (era daí que vinha a data de hoje em vez da data informada).
+    repintarPreviewIndividual();
   }
 
   function previewIndividual() {
     function v(id, dv) { var el = document.getElementById(id); return el && el.value ? el.value : dv; }
     var tid = v("ci-treinamento", "");
     var tr = tid ? treinamentoPorId(tid) : treinamentoPorId("nr18");
+    // A data do certificado é EXATAMENTE a do formulário. Só cai no "hoje"
+    // quando o campo está vazio ou ilegível — nunca por cima do que foi digitado.
+    var dataForm = comoData(v("ci-data", ""));
+    if (!dataForm) dataForm = MS.NOW;
     return previewCertificado({
       participante: v("ci-nome", "Mariana Alves Correia"),
       cpf: v("ci-cpf", MS.maskCpf()),
       empresa: v("ci-empresa", "Construtora Horizonte"),
       treinamento: tr.nome,
-      nr: tr.nr,
+      nr: v("ci-nr", tr.nr),
       cargaHoraria: v("ci-carga", "6"),
-      data: MS.NOW,
+      data: dataForm,
+      // A validade do preview é calculada da MESMA forma que no certificado
+      // gerado (validadeDe), para o que o usuário vê ser o que ele imprime.
+      validade: validadeDe(dataForm, tid || "nr18"),
       local: v("ci-local", "Recife — PE"),
       instrutor: v("ci-instrutor", "Maria Silva"),
       responsavel: v("ci-resp", "Maria Silva"),
-      codigo: "MS-2026-INDIVIDUAL"
+      modelo: "Modelo padrão MS Consultoria",
+      codigo: "MS-" + dataForm.getFullYear() + "-IND"
     });
   }
 
@@ -1242,26 +1775,24 @@
     var id = el.getAttribute("data-cert");
     var c = CERTIFICADOS.filter(function (x) { return x.id === id; })[0];
     if (!c) return;
+    MS.actions._certAberto = c.id;
     MS.openModal(
       MS.modalHeader("Certificado " + esc(c.codigo)) +
       '<div class="modal__body cert-preview-wrap">' +
-      previewCertificado({
-        participante: c.participante, cpf: c.cpf, empresa: empresaDe(c), treinamento: c.treinamento, nr: c.nr,
-        cargaHoraria: c.cargaHoraria, data: c.emissao, local: c.local,
-        instrutor: c.instrutor, responsavel: c.responsavel, codigo: c.codigo
-      }) +
+      previewCertificado(cfgDoCert(c)) +
       '<div class="cert-meta">' +
-      '<div><span class="nc-box__k">Turma</span><span class="nc-box__v">' + (c.turmaId ? fmtDate(turmaPorId(c.turmaId).data) : "Certificado individual") + "</span></div>" +
-      '<div><span class="nc-box__k">Obra / Unidade</span><span class="nc-box__v">' + esc(nomeObraDe(c)) + "</span></div>" +
+      '<div><span class="nc-box__k">Participante</span><span class="nc-box__v">' + esc(c.participante) + "</span></div>" +
+      '<div><span class="nc-box__k">CPF</span><span class="nc-box__v">' + esc(mascaraDoCert(c)) + "</span></div>" +
       '<div><span class="nc-box__k">Emissão</span><span class="nc-box__v">' + fmtDate(c.emissao) + "</span></div>" +
       '<div><span class="nc-box__k">Validade</span><span class="nc-box__v">' + fmtDate(c.validade) + " · " + MS.vencTexto(c.validade) + "</span></div>" +
       "</div>" +
-      '<div class="demo-note">Pré-visualização demonstrativa. O PDF real e a validação por QR Code entram na versão final.</div>' +
+      '<div class="demo-note">O CPF aparece mascarado na tela; no certificado impresso consta o número completo ' +
+      "informado no arquivo. O QR Code é estrutural — a validação pública por QR entra na versão com backend.</div>" +
       "</div>" +
       '<div class="modal__foot">' +
       '<button class="btn btn--light" data-modal-close>Fechar</button>' +
-      '<button class="btn btn--light" data-toast-action="Reemissão solicitada — demonstração visual.">Reemitir</button>' +
-      '<button class="btn btn--primary" data-toast-action="Download do certificado — demonstração visual.">Baixar</button>' +
+      '<button class="btn btn--light" data-action="cert-imprimir" data-cert="' + c.id + '">Imprimir / Salvar PDF</button>' +
+      '<button class="btn btn--primary" data-action="cert-editar" data-cert="' + c.id + '">Editar dados</button>' +
       "</div>"
     );
   };
@@ -1312,18 +1843,6 @@
   MS.actions["wiz-configurar"] = function () { irPara(4); };
   MS.actions["wiz-gerar"] = function () { irPara(5); };
 
-  MS.actions["simular-arquivo"] = function () {
-    wiz.arquivo = { nome: "participantes-nr18.xlsx", tamanho: "38 KB", formato: "Excel (.xlsx) — planilha estruturada" };
-    wiz.encontrados = participantesDoArquivo();
-    MS.showToast("Arquivo processado (demonstração). Nenhum arquivo foi enviado a servidor.");
-    MS.rerender();
-  };
-  MS.actions["remover-arquivo"] = function () {
-    wiz.arquivo = null; wiz.encontrados = null; wiz.gerado = false;
-    MS.showToast("Arquivo removido da demonstração.");
-    MS.rerender();
-  };
-
   MS.actions["wiz-ignorar"] = function (el) {
     var idx = Number(el.getAttribute("data-idx"));
     wiz.ignorados[idx] = true;
@@ -1335,16 +1854,32 @@
     var idx = Number(el.getAttribute("data-idx"));
     var p = wiz.encontrados.filter(function (x) { return x.idx === idx; })[0];
     if (!p) return;
+    // O select de treinamento mostra o que veio do arquivo (quando reconhecido).
+    var atual = "";
+    TREINAMENTOS.forEach(function (t) {
+      var rot = t.nr !== "—" ? t.nr + " — " + t.nome : t.nome;
+      if (p.treinamento && (p.treinamento === rot || p.treinamento === t.nr || p.treinamento === t.nome)) atual = rot;
+    });
     MS.openModal(
       MS.modalHeader("Corrigir informação") +
       '<div class="modal__body"><div class="form-grid">' +
-      '<label class="field"><span class="field__label">Nome completo</span><input class="field__input" id="wc-nome" value="' + esc(p.nome) + '" /></label>' +
-      '<label class="field"><span class="field__label">CPF</span><input class="field__input" id="wc-cpf" placeholder="Informe o CPF do participante" value="' + esc(p.cpf || "") + '" /></label>' +
+      '<label class="field"><span class="field__label">Nome completo ' +
+      '<em class="mapear__req">obrigatório</em></span>' +
+      '<input class="field__input" id="wc-nome" value="' + esc(p.nome === "— sem nome —" ? "" : p.nome) + '" /></label>' +
+      '<label class="field"><span class="field__label">CPF</span>' +
+      '<input class="field__input" id="wc-cpf" placeholder="000.000.000-00" value="" /></label>' +
+      '<label class="field"><span class="field__label">Empresa</span>' +
+      '<input class="field__input" id="wc-empresa" value="' + esc(p.empresa || "") + '" /></label>' +
       '<label class="field"><span class="field__label">Treinamento</span>' +
       '<select class="field__input" id="wc-treinamento">' +
-      TREINAMENTOS.map(function (t) { return "<option>" + esc(t.nr !== "—" ? t.nr + " — " + t.nome : t.nome) + "</option>"; }).join("") +
+      '<option value="">— manter / não identificado —</option>' +
+      TREINAMENTOS.map(function (t) {
+        var rot = t.nr !== "—" ? t.nr + " — " + t.nome : t.nome;
+        return '<option' + (rot === atual ? " selected" : "") + ">" + esc(rot) + "</option>";
+      }).join("") +
       "</select></label>" +
-      '<div class="demo-note">Correção demonstrativa. Na versão final, o CPF informado será gravado com segurança no banco.</div>' +
+      '<div class="demo-note">A correção vale para esta sessão. O CPF informado aqui fica apenas na memória ' +
+      "da aba — não é gravado em banco nem em <em>localStorage</em>.</div>" +
       "</div></div>" +
       '<div class="modal__foot"><button class="btn btn--light" data-modal-close>Cancelar</button>' +
       '<button class="btn btn--primary" data-modal-action="wiz-salvar-correcao" data-idx="' + idx + '">Salvar correção</button></div>'
@@ -1359,49 +1894,73 @@
     if (!p) { MS.closeModal(); return; }
     var nome = (document.getElementById("wc-nome") || {}).value || "";
     var cpf = (document.getElementById("wc-cpf") || {}).value || "";
+    var emp = (document.getElementById("wc-empresa") || {}).value || "";
     var trein = (document.getElementById("wc-treinamento") || {}).value || "";
     var probs = p.problemas.slice();
-    if (nome.split(" ").filter(Boolean).length >= 2) probs = probs.filter(function (x) { return x !== "Nome incompleto"; });
-    if (cpf.trim().length >= 11) { p.cpf = MS.maskCpf(); probs = probs.filter(function (x) { return x !== "CPF ausente"; }); }
-    if (trein && trein.indexOf("não identificado") < 0) {
-      p.treinamento = trein;
-      probs = probs.filter(function (x) { return x !== "Treinamento não identificado"; });
-    }
+    var limpa = function (t) { return probs.filter(function (x) { return x !== t; }); };
+    // Nome: completo (duas palavras com 2+ letras) resolve "Nome ausente"/"incompleto".
     if (nome) p.nome = nome;
+    if (nome.replace(/\s+/g, " ").split(" ").filter(function (x) { return x.length >= 2; }).length >= 2) {
+      probs = limpa("Nome ausente"); probs = limpa("Nome incompleto");
+    }
+    // CPF: guardado só em memória (_cpf); na interface segue mascarado.
+    var dig = cpf.replace(/\D/g, "");
+    if (dig.length === 11) {
+      if (cpfValido(dig)) { p._cpf = dig; p.cpf = MS.maskCpf(); probs = limpa("CPF ausente"); probs = limpa("CPF inválido"); }
+      else { probs = limpa("CPF ausente"); if (probs.indexOf("CPF inválido") < 0) probs.push("CPF inválido"); }
+    }
+    if (emp) { p.empresa = emp; probs = limpa("Empresa ausente"); }
+    if (trein) { p.treinamento = trein; probs = limpa("Treinamento não identificado"); }
     p.problemas = probs;
     p.status = probs.length ? "Revisar" : "Pronto";
     MS.closeModal();
-    MS.showToast(probs.length ? "Informação atualizada — ainda há pendências neste participante." : "Participante corrigido e pronto para emissão.");
+    MS.showToast(probs.length
+      ? "Informação atualizada — ainda há " + probs.length + " pendência(s) neste participante."
+      : "Participante corrigido e pronto para emissão.");
     MS.rerender();
   };
 
   MS.actions["ci-gerar"] = function () {
-    var nome = (document.getElementById("ci-nome") || {}).value || "";
+    function g(id, dv) { var e = document.getElementById(id); return e && e.value ? e.value : dv; }
+    var nome = g("ci-nome", "");
     if (!nome.trim()) { MS.showToast("Informe o nome completo do participante."); return; }
-    var tid = (document.getElementById("ci-treinamento") || {}).value || "nr18";
+    var tid = g("ci-treinamento", "nr18");
     var tr = treinamentoPorId(tid);
-    var emp = (document.getElementById("ci-empresa") || {}).value || "Construtora Horizonte";
+    var emp = g("ci-empresa", "Construtora Horizonte");
     var cl = MS.CLIENTES.filter(function (c) { return c.nome === emp; })[0];
+    // A data vem do formulário — é ela que vai para o certificado.
+    var dataForm = comoData(g("ci-data", ""));
+    if (!dataForm) { MS.showToast("Informe a data do treinamento no formato dd/mm/aaaa."); return; }
+    // CPF: só entra no certificado se for um CPF REAL de 11 dígitos. Se o
+    // campo estiver vazio ou ainda com a máscara, o certificado sai "não
+    // informado" — nunca com "***.***.***-**" impresso como se fosse o número.
+    var cpfBruto = g("ci-cpf", "");
+    var temCpf = cpfValido(cpfBruto);
+    if (cpfBruto.replace(/\D/g, "") && !temCpf) {
+      MS.showToast("O CPF informado não é válido. Corrija ou deixe em branco.");
+      return;
+    }
     var nova = {
       id: "ind-" + Date.now(),
-      codigo: "MS-" + MS.NOW.getFullYear() + "-I" + String(CERTIFICADOS.length + 1).padStart(4, "0"),
+      codigo: "MS-" + dataForm.getFullYear() + "-I" + String(CERTIFICADOS.length + 1).padStart(4, "0"),
       participante: nome,
-      cpf: (document.getElementById("ci-cpf") || {}).value || MS.maskCpf(),
-      treinamentoId: tid, nr: tr.nr, treinamento: tr.nome,
+      cpf: temCpf ? cpfBruto : "CPF não informado",
+      treinamentoId: tid, nr: g("ci-nr", tr.nr), treinamento: tr.nome,
       clienteId: cl ? cl.id : "c5",
+      empresaNome: emp,
       obraId: cl && cl.obras[0] ? cl.obras[0].id : "o9",
       turmaId: null,
-      emissao: MS.NOW,
-      validade: validadeDe(MS.NOW, tid),
-      cargaHoraria: (document.getElementById("ci-carga") || {}).value || tr.cargaPadrao,
-      instrutor: (document.getElementById("ci-instrutor") || {}).value || "Maria Silva",
-      responsavel: (document.getElementById("ci-resp") || {}).value || "Maria Silva",
-      local: (document.getElementById("ci-local") || {}).value || "Recife — PE",
+      emissao: dataForm,
+      validade: validadeDe(dataForm, tid),
+      cargaHoraria: g("ci-carga", tr.cargaPadrao),
+      instrutor: g("ci-instrutor", "Maria Silva"),
+      responsavel: g("ci-resp", "Maria Silva"),
+      local: g("ci-local", "Recife — PE"),
       modelo: "Modelo padrão MS Consultoria",
-      status: "Emitido", problemas: [], demo: true
+      status: "Emitido nesta sessão", origem: "individual", problemas: [], demo: true
     };
     CERTIFICADOS.unshift(nova);
-    MS.showToast("Certificado individual gerado (demonstração). Código " + nova.codigo + ".");
+    MS.showToast("Certificado de " + nova.participante + " gerado nesta sessão. Código " + nova.codigo + ".");
     MS.actions["cert-ver"]({ getAttribute: function () { return nova.id; } });
   };
   MS.actions["ci-preview"] = function () {
@@ -1411,46 +1970,203 @@
   };
 
   /* ======================================================================
-     16. DELEGAÇÃO — upload simulado e selects do assistente
+     16. EVENTOS — leitura real do arquivo, drag & drop e selects
      ====================================================================== */
-  // Efeito visual de "enviando" na área de upload (nada sai do navegador).
-  document.addEventListener("click", function (e) {
-    var alvo = e.target.closest ? e.target.closest("[data-upload-zone] [data-action='simular-arquivo']") : null;
-    if (!alvo) return;
-    var zona = alvo.closest("[data-upload-zone]");
-    if (!zona) return;
-    zona.classList.add("is-loading");
-    var txt = zona.querySelector(".upload-zone__title");
-    if (txt) txt.textContent = "Lendo a planilha...";
-    setTimeout(function () { zona.classList.remove("is-loading"); }, 600);
-  });
+  // Um único listener para cada tipo de evento (evita duplicidade).
+  var _dragAtivo = null;
+
+  function mostrarErroLeitura() {
+    MS.rerender();
+    var el = document.querySelector(".upload-erro");
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "center" });
+  }
+
+  // Trata o File escolhido/arrastado. A leitura é 100% local.
+  function tratarArquivo(file) {
+    if (!file) return;
+    if (!wiz) novoWizard();
+    var zona = document.querySelector("[data-upload-zone]");
+    if (zona) {
+      zona.classList.remove("is-drag");
+      zona.classList.add("is-loading");
+      var txt = zona.querySelector(".upload-zone__title");
+      if (txt) txt.textContent = "Lendo a planilha no seu navegador…";
+    }
+    // Pequeno atraso só para o usuário ver o estado de leitura; nada sai daqui.
+    setTimeout(function () {
+      lerArquivo(file, function () {
+        if (zona) zona.classList.remove("is-loading");
+        if (wiz.aviso) {
+          MS.showToast(wiz.aviso.titulo);
+        } else if (wiz.origem === "arquivo") {
+          MS.showToast(wiz.linhas.length + " linha(s) lida(s) de " + wiz.arquivo.nome +
+            " — " + wiz.colunas.length + " colunas. Nada foi enviado a servidor.");
+        }
+        MS.rerender();
+        var alvoErro = document.querySelector(".upload-erro");
+        if (alvoErro && alvoErro.scrollIntoView) alvoErro.scrollIntoView({ block: "center" });
+      });
+    }, 220);
+  }
+
+  MS.actions["escolher-arquivo"] = function () {
+    var inp = document.getElementById("cert-file");
+    if (!inp) return;
+    inp.value = "";           // permite reescolher o MESMO arquivo
+    inp.click();
+  };
 
   document.addEventListener("change", function (e) {
     var t = e.target;
-    if (!t || !t.id) return;
+    if (!t) return;
+
+    // 1) Arquivo escolhido pelo botão/input
+    if (t.id === "cert-file") {
+      var f = t.files && t.files[0];
+      if (f) tratarArquivo(f);
+      return;
+    }
     if (!wiz) return;
-    if (t.id === "cfg-treinamento") { wiz.config.treinamentoId = t.value; MS.rerender(); }
-    else if (t.id === "cfg-empresa") { wiz.config.empresa = t.value; }
-    else if (t.id === "cfg-carga") { wiz.config.cargaHoraria = t.value; }
-    else if (t.id === "cfg-local") { wiz.config.local = t.value; }
-    else if (t.id === "cfg-instrutor") { wiz.config.instrutor = t.value; }
-    else if (t.id === "cfg-resp") { wiz.config.responsavel = t.value; }
-    else if (t.id === "cfg-modelo") { wiz.config.modelo = t.value; }
-    else if (t.id === "cfg-data") {
-      var p = String(t.value).split("/");
-      var d = new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0]));
-      if (!isNaN(d.getTime())) wiz.config.data = d;
+
+    // 2) Campos da etapa 4 (formulário é dono do valor; o preview é repintado)
+    if (t.id === "cfg-treinamento") { lerConfig(); repintarPreviewConfig(); }
+    else if (t.id === "cfg-empresa") { lerConfig(); repintarPreviewConfig(); }
+    else if (t.id === "cfg-carga") { lerConfig(); repintarPreviewConfig(); }
+    else if (t.id === "cfg-local") { lerConfig(); repintarPreviewConfig(); }
+    else if (t.id === "cfg-instrutor") { lerConfig(); repintarPreviewConfig(); }
+    else if (t.id === "cfg-resp") { lerConfig(); repintarPreviewConfig(); }
+    else if (t.id === "cfg-modelo") { lerConfig(); repintarPreviewConfig(); }
+    else if (t.id === "cfg-data") { lerConfig(); repintarPreviewConfig(); }
+    else if (t.getAttribute && t.getAttribute("data-campo")) {
+      // 3) Mapeamento de colunas (campo do sistema → coluna da planilha)
+      wiz.mapa[t.getAttribute("data-campo")] = t.value;
+      toast(MS, "“" + t.value + "” mapeado.");
     }
   });
 
-  // Mapeamento de colunas (selects)
-  document.addEventListener("change", function (e) {
-    var t = e.target;
-    if (t && t.getAttribute && t.getAttribute("data-mapear") != null && wiz) {
-      wiz.colunas[Number(t.getAttribute("data-mapear"))].destino = t.value;
-      MS.showToast("Coluna mapeada para “" + t.value + "”.");
+  // O formulário "Novo certificado" é dono do que aparece na pré-visualização:
+  // ao digitar/escolher, o preview é repintado na hora (sem precisar do botão).
+  // Só age naquela tela (#ci-preview) — nada muda nas outras.
+  function repintarPreviewIndividual() {
+    var alvo = document.getElementById("ci-preview");
+    if (!alvo || !alvo.parentNode) return;   // tela não está montada
+    alvo.innerHTML = previewIndividual();
+  }
+  ["input", "change"].forEach(function (ev) {
+    document.addEventListener(ev, function (e) {
+      var t = e.target;
+      if (!t || !t.id || t.id.indexOf("ci-") !== 0) return;
+      if (t.id === "ci-preview") return;
+      repintarPreviewIndividual();
+    });
+  });
+
+  // Pequeno atalho para o toast, mantendo o padrão do sistema.
+  function toast(MSref, txt) { if (MSref && MSref.showToast) MSref.showToast(txt); }
+
+  // ---------- Drag & drop real ----------
+  // Só agimos quando a tela de importação está montada. Assim os outros
+  // módulos não ganham nenhum comportamento novo.
+  function zonaUpload() {
+    return document.querySelector("[data-upload-zone]");
+  }
+
+  document.addEventListener("dragenter", function (e) {
+    var z = zonaUpload();
+    if (!z) return;
+    // Sempre preventDefault enquanto a área de upload está na tela: se o
+    // navegador tratar o arraste como navegação, ele ABRE o arquivo e o
+    // usuário sai do sistema sem querer.
+    e.preventDefault();
+    if (!e.target.closest || !e.target.closest("[data-upload-zone]")) return;
+    _dragAtivo = z;
+    z.classList.add("is-drag");
+  });
+  document.addEventListener("dragover", function (e) {
+    var z = zonaUpload();
+    if (!z) return;
+    e.preventDefault();                       // sem isto o drop não dispara
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    if ((e.target.closest && e.target.closest("[data-upload-zone]")) &&
+        !z.classList.contains("is-drag")) z.classList.add("is-drag");
+  });
+  document.addEventListener("dragleave", function (e) {
+    var z = zonaUpload();
+    if (!z) return;
+    var dentro = e.target.closest ? e.target.closest("[data-upload-zone]") : null;
+    if (dentro) {
+      // Só remove quando o ponteiro realmente sai da zona.
+      if (e.relatedTarget && dentro.contains(e.relatedTarget)) return;
+      dentro.classList.remove("is-drag");
+      if (_dragAtivo === dentro) _dragAtivo = null;
+    } else if (!e.relatedTarget) {
+      // Saiu da janela: limpa qualquer realce que tenha ficado.
+      z.classList.remove("is-drag");
+      _dragAtivo = null;
     }
   });
+  document.addEventListener("drop", function (e) {
+    var z = zonaUpload();
+    if (!z) return;
+    // Fora da zona: impede que o navegador abra o arquivo (perderia a tela).
+    e.preventDefault();
+    z.classList.remove("is-drag");
+    _dragAtivo = null;
+    if (!e.target.closest || !e.target.closest("[data-upload-zone]")) {
+      MS.showToast("Solte o arquivo dentro da área pontilhada para importar.");
+      return;
+    }
+    var dt = e.dataTransfer;
+    var f = dt && dt.files && dt.files[0];
+    if (!f) { MS.showToast("Nenhum arquivo identificado no que foi arrastado."); return; }
+    tratarArquivo(f);
+  });
+
+  MS.actions["carregar-demo"] = function () {
+    wiz.arquivo = { nome: "participantes-nr18.xlsx (exemplo)", tamanho: "38 KB", formato: "Excel — exemplo fictício", ext: "xlsx", linhas: 27 };
+    wiz.colunas = ["NOME COMPLETO", "CPF", "EMPRESA", "CURSO", "DATA", "CARGA HORÁRIA"];
+    wiz.linhas = [];
+    wiz.mapa = { nome: "NOME COMPLETO", cpf: "CPF", empresa: "EMPRESA", treinamento: "CURSO", data: "DATA", carga: "CARGA HORÁRIA", local: "", instrutor: "" };
+    wiz.encontrados = participantesDoArquivo();
+    wiz.origem = "demo";
+    wiz.aviso = null;
+    wiz.gerado = false;
+    wiz.herdado = false;
+    MS.showToast("Exemplo fictício carregado. Substitua por um arquivo real quando quiser testar de verdade.");
+    MS.rerender();
+  };
+
+  MS.actions["remover-arquivo"] = function () {
+    var nome = wiz && wiz.arquivo ? wiz.arquivo.nome : "";
+    novoWizard();
+    MS.showToast(nome ? "“" + nome + "” removido da sessão." : "Arquivo removido.");
+    MS.rerender();
+  };
+
+  MS.actions["reativar-ignorados"] = function () {
+    wiz.ignorados = {};
+    MS.showToast("Todos os participantes voltaram para a lista.");
+    MS.rerender();
+  };
+
+  MS.actions["cfg-atualizar"] = function () {
+    lerConfig();
+    repintarPreviewConfig();
+    MS.showToast("Pré-visualização atualizada com os valores do formulário.");
+  };
+
+  MS.actions["cert-imprimir"] = function (el) {
+    var c = CERTIFICADOS.filter(function (x) { return x.id === el.getAttribute("data-cert"); })[0];
+    if (!c) return;
+    imprimirLista([c], "Certificado " + c.codigo + " — " + c.participante);
+  };
+
+  MS.actions["cert-imprimir-lote"] = function (el) {
+    var qtd = Number(el.getAttribute("data-lote")) || 0;
+    var lista = (wiz && wiz.gerado ? wiz.gerado : []).slice(0, qtd);
+    if (!lista.length) lista = CERTIFICADOS.filter(function (c) { return c.origem === "arquivo" || c.demo; });
+    imprimirLista(lista, "Certificados — MS Consultoria SST");
+  };
 
   /* ======================================================================
      17. ROTAS

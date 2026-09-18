@@ -368,13 +368,12 @@
     var rdos = [];
     var base = {
       o1: { n: 34, months: 8 }, o2: { n: 31, months: 8 }, o4: { n: 9, months: 7 },
-      // o9 (Edifício Aurora) mantém 12 relatórios no histórico da obra.
-      o9: { n: 18, months: 8, qtd: 12 }, o10: { n: 12, months: 7 }, o11: { n: 21, months: 6 }, o12: { n: 26, months: 8 }
+      o9: { n: 18, months: 8 }, o10: { n: 12, months: 7 }, o11: { n: 21, months: 6 }, o12: { n: 26, months: 8 }
     };
     Object.keys(base).forEach(function (ok) {
       var cfg = base[ok];
       var num = cfg.n;
-      for (var i = 0; i < (cfg.qtd || 6); i++) {
+      for (var i = 0; i < 6; i++) {
         // "Hoje" na demonstração é 18/09/2026 — os RDOs mais recentes partem dessa data.
         var d = new Date(2026, 8, 18 - i, 18, 0);
         if (d.getDay() === 0) { d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1, 18, 0); }
@@ -1133,19 +1132,20 @@
       '<div class="kpi rv' + (pendentes ? " kpi--alert" : "") + '"><span class="kpi__label">Pendências</span><div class="kpi__value">' + pendentes + "</div></div>" +
       "</div>" +
 
+      // Visão geral → Fiscalizações → Relatórios → Fotos → Serviços / OS →
+      // Documentos → Equipe → Histórico. Fiscalizações entra pelos módulos.
       '<div class="tabs rv">' +
-      '<button class="tab is-active" data-tab="resumo">Resumo</button>' +
-      '<button class="tab" data-tab="servicos">Serviços <span class="tab__count">' + o.servicos.length + "</span></button>" +
-      '<button class="tab" data-tab="rdos">RDOs <span class="tab__count">' + rdos.length + "</span></button>" +
-      '<button class="tab" data-tab="fotos">Fotos <span class="tab__count">' + fotos.length + "</span></button>" +
-      '<button class="tab" data-tab="documentos">Documentos</button>' +
-      '<button class="tab" data-tab="equipe">Equipe</button>' +
-      '<button class="tab" data-tab="historico">Histórico</button>' +
-      // Abas extras registradas pelos módulos (ex.: Fiscalizações da obra).
+      '<button class="tab is-active" data-tab="resumo">Visão geral</button>' +
       OBRA_TABS.map(function (t) {
         return '<button class="tab" data-tab="' + esc(t.id) + '">' + esc(t.label) +
           (t.count ? ' <span class="tab__count">' + t.count(o) + "</span>" : "") + "</button>";
       }).join("") +
+      '<button class="tab" data-tab="rdos">Relatórios <span class="tab__count">' + rdos.length + "</span></button>" +
+      '<button class="tab" data-tab="fotos">Fotos <span class="tab__count">' + fotos.length + "</span></button>" +
+      '<button class="tab" data-tab="servicos">Serviços / OS <span class="tab__count">' + o.servicos.length + "</span></button>" +
+      '<button class="tab" data-tab="documentos">Documentos</button>' +
+      '<button class="tab" data-tab="equipe">Equipe</button>' +
+      '<button class="tab" data-tab="historico">Histórico</button>' +
       "</div>" +
       '<div id="tab-content"></div>';
 

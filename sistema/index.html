@@ -260,6 +260,12 @@
 
   <!-- Núcleo do sistema (dados demo, roteador, telas originais). -->
   <script src="js/sistema.js"></script>
+  <!-- SheetJS (leitor de planilhas). Carregado ANTES de certificados.js, que
+       depende dele para ler .xlsx/.xls/.csv. A biblioteca é usada apenas como
+       PARSER LOCAL: o arquivo escolhido pelo usuário nunca sai do navegador.
+       Se este CDN não carregar, o módulo de certificados continua abrindo e
+       avisa que a importação está indisponível (não quebra a tela). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <!-- Módulos novos. Carregam DEPOIS do núcleo e apenas REGISTRAM rotas e
        blocos extras — não alteram nenhuma tela existente.
        Caminhos relativos (sem "/" na frente) para funcionar na Vercel com

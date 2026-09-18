@@ -212,6 +212,17 @@
 .chk-item__title h4 { font-size: 1rem; color: var(--green-900); }
 .chk-item__fotos { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--grey-200); display: grid; gap: 10px; }
 
+/* ---------- Selo de situação do item (checklist e relatório) ---------- */
+.chk-item__sit { flex-shrink: 0; white-space: nowrap; }
+.rel-item__sit { flex-shrink: 0; white-space: nowrap; }
+
+/* ---------- Ações rápidas do item (Salvar / Próximo) ---------- */
+.chk-item__acoes {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--grey-100);
+}
+.chk-item__acoes .btn { flex: 1 1 auto; }
+
 /* ---------- Quantidade (capacetes 18/16/2 etc.) ---------- */
 .chk-qtd { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
 .chk-qtd > * { min-width: 0; }
@@ -430,6 +441,13 @@
 }
 .cert-doc__brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px; }
 .cert-doc__brand svg { width: 34px; height: 34px; color: var(--green-700); }
+/* Nome e subtítulo da marca em elementos separados (evita texto colado). */
+.cert-doc__marca { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; text-align: left; }
+.cert-doc__marca strong { font-size: .95rem; font-weight: 800; letter-spacing: .04em; color: var(--green-900); }
+.cert-doc__marca span { font-size: .72rem; color: var(--grey-500); margin-top: 2px; }
+/* Modelo institucional — fundo branco (sem degradê verde). */
+.cert-doc--institucional .cert-doc__border { background: #fff; border-color: var(--green-800); }
+.cert-doc--institucional .cert-doc__nome { border-bottom-color: var(--grey-200); }
 .cert-doc__titulo {
   font-size: 1.3rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
   color: var(--green-800); line-height: 1.2;
@@ -445,6 +463,9 @@
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
   margin: 22px 0 6px; text-align: left;
 }
+/* O nome do participante ocupa a linha inteira: é o dado principal do
+   certificado e, com 7 campos, evita uma célula órfã na última linha. */
+.cert-doc__grid .cert-field:first-child { grid-column: 1 / -1; }
 .cert-field { min-width: 0; }
 .cert-field__l { display: block; font-size: .64rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--grey-500); }
 .cert-field__v { font-size: .86rem; font-weight: 600; color: var(--grey-800); }
@@ -549,13 +570,52 @@
 
 .wizard-foot { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-top: 18px; }
 
-/* ---------- Área de upload ---------- */
-.upload-zone--big { padding: 44px 20px; }
-.upload-zone--big .upload-zone__icon { font-size: 2.6rem; }
-.upload-zone--big .upload-zone__title { font-size: 1.1rem; margin-top: 10px; }
+/* ---------- Área de upload ----------
+   O sistema.css tem uma regra global `img, svg, video { max-width: 100% }`.
+   Sozinha, ela NÃO dimensiona o SVG — mas qualquer SVG sem width/height
+   dentro de um container largo estica até a largura toda. Por isso todo
+   ícone da área de upload recebe tamanho explícito em px abaixo, e não
+   pode crescer por causa de nenhuma regra genérica de svg{width:100%}.
+   Área compacta: 230–320px de altura no desktop. */
+.upload-zone--big {
+  padding: 26px 20px;
+  min-height: 0;              /* nunca herda altura de viewport */
+  max-height: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.upload-zone--big .upload-zone__icon {
+  font-size: 1rem;
+  width: 64px; height: 64px;
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: var(--green-100);
+  color: var(--green-600);
+}
+/* Tamanho DEFINITIVO do SVG do ícone — 32px, imutável. */
+.upload-zone .upload-zone__icon svg,
+.upload-zone__icon svg {
+  width: 32px; height: 32px;
+  min-width: 32px; min-height: 32px;
+  max-width: 32px; max-height: 32px;
+  flex: 0 0 auto;
+  display: block;
+}
+.upload-zone--big .upload-zone__title { font-size: 1.05rem; margin-top: 12px; }
+.upload-zone--big .upload-zone__sub { max-width: 360px; margin-left: auto; margin-right: auto; }
+.upload-zone--big .btn { margin-top: 14px; }
 .upload-zone__tipos { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
 .upload-zone.is-loading { opacity: .65; pointer-events: none; }
+.upload-zone.is-drag { border-color: var(--green-600); background: var(--green-100); border-style: solid; }
 .upload-hint { font-size: .78rem; color: var(--grey-500); margin-top: 10px; text-align: center; }
+
+/* O input de arquivo real fica acessível mas invisível: o clique é
+   disparado pelo botão e pela própria área de upload. */
+.upload-input {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
 
 .tipo {
   font-size: .72rem; font-weight: 700;
@@ -624,7 +684,39 @@
   overflow: hidden; text-overflow: ellipsis;
 }
 .mapear__seta { text-align: center; color: var(--grey-300); font-weight: 800; }
-.mapear__sel .field__input { font-size: .84rem; padding: 8px 10px; }
+.mapear__sel { font-size: .84rem; padding: 8px 10px; }
+.mapear__req {
+  font-style: normal; font-size: .6rem; font-weight: 800; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--red-500); margin-left: 6px;
+}
+.mapear__row--falta { background: rgba(224, 93, 77, .05); border-radius: var(--radius-sm); }
+.mapear__amostra {
+  margin-top: 16px; padding: 12px 14px; background: var(--off-white);
+  border: 1px solid var(--grey-100); border-radius: var(--radius-sm);
+}
+.mapear__amostra__l {
+  display: block; font-size: .64rem; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--grey-500); margin-bottom: 6px;
+}
+.mapear__amostra__v { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--grey-700); }
+.mapear__amostra__v em { font-style: normal; font-weight: 700; color: var(--green-800); }
+
+/* ---------- Retorno de erro da leitura do arquivo ---------- */
+.upload-erro {
+  margin-top: 14px; padding: 13px 15px; border-radius: var(--radius-sm);
+  border: 1px solid var(--red-400); background: rgba(224, 93, 77, .07);
+}
+.upload-erro strong { display: block; font-size: .9rem; color: var(--red-500); margin-bottom: 3px; }
+.upload-erro p { font-size: .84rem; color: var(--grey-700); line-height: 1.55; }
+.upload-erro--formato { border-color: var(--amber-400); background: rgba(245, 176, 65, .1); }
+.upload-erro--formato strong { color: var(--amber-500); }
+.upload-erro--motor, .upload-erro--vazio, .upload-erro--cabecalho { border-color: var(--amber-400); background: rgba(245, 176, 65, .1); }
+.upload-erro--motor strong, .upload-erro--vazio strong, .upload-erro--cabecalho strong { color: var(--amber-500); }
+
+/* Linha de participante com pendência na revisão */
+.table tbody tr.row-revisar { background: rgba(245, 176, 65, .06); }
+.link-btn--muted { color: var(--grey-500); font-weight: 600; }
+.link-btn--muted:hover { color: var(--red-500); }
 
 /* ---------- Revisão ---------- */
 .rev-resumo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
@@ -1101,6 +1193,9 @@
   .chk-actions .btn { width: 100%; }
   .chk-fields { grid-template-columns: 1fr 1fr; }
   .chk-item__fotos { margin-top: 12px; }
+  /* Na obra, com uma mão só: os dois botões ocupam a largura toda */
+  .chk-item__acoes { display: grid; grid-template-columns: 1fr; }
+  .chk-item__acoes .btn { width: 100%; min-height: 48px; }
 
   /* Demais blocos */
   .nc-resumo, .rel-resumo, .rev-resumo { grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -1190,3 +1285,80 @@
   .chk-opt__btn, .atalho, .evid-thumb, .cat-card, .acesso-cert, .obra-mini, .mini-btn { transition: none !important; }
   .prog__fill { transition: none; }
 }
+
+/* ==========================================================================
+   16. IMPRESSÃO DO CERTIFICADO — A4 RETRATO
+   --------------------------------------------------------------------------
+   Ao imprimir/salvar em PDF mostra APENAS o certificado. Sidebar, topbar,
+   barra de demonstração, botões, avisos e o fundo do sistema ficam ocultos.
+   O corpo do certificado é clonado para #print-area por imprimirCertificado()
+   em certificados.js — assim a impressão nunca depende do layout da tela.
+   ========================================================================== */
+#print-area { display: none; }
+
+/* Formato da folha. Fica FORA do @media print: o @page é a regra que define
+   o papel, e alguns navegadores só a respeitam no nível superior. */
+@page { size: A4 portrait; margin: 0; }
+
+@media print {
+  /* Some tudo que não é o certificado. */
+  .demo-bar, .login, .app, .sheet, .modal, .toast,
+  #demo-bar, #login, #app, #sheet, #modal, #toast,
+  .cert-preview-acoes, .aviso-import, .demo-note, .upload-zone, .upload-erro,
+  .wizard-foot, .wizard-steps, .page-head, .sidebar, .topbar, .fab, .crumbs {
+    display: none !important;
+  }
+
+  html, body {
+    background: #fff !important;
+    margin: 0 !important; padding: 0 !important;
+    width: auto !important; height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Só a área de impressão aparece, e ocupa a folha inteira. */
+  body > #print-area { display: block !important; }
+  #print-area .cert-doc {
+    display: block !important;
+    position: static !important;
+    max-width: none !important; width: 100% !important;
+    margin: 0 !important; padding: 0 !important;
+    box-shadow: none !important; border-radius: 0 !important;
+    background: #fff !important;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  #print-area .cert-doc__border {
+    border: 2px solid var(--green-700) !important;
+    border-radius: 8px !important;
+    padding: 26mm 20mm !important;
+    background: linear-gradient(180deg, #fff 0%, var(--green-50) 100%) !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  #print-area .cert-doc--institucional .cert-doc__border { background: #fff !important; }
+
+  /* Tipografia calibrada para a folha A4 (210 x 297 mm). */
+  #print-area .cert-doc__marca strong { font-size: 15pt !important; }
+  #print-area .cert-doc__marca span { font-size: 10pt !important; }
+  #print-area .cert-doc__brand svg { width: 46px !important; height: 46px !important; }
+  #print-area .cert-doc__titulo { font-size: 24pt !important; letter-spacing: .14em !important; }
+  #print-area .cert-doc__sub { font-size: 11pt !important; }
+  #print-area .cert-doc__texto { font-size: 11.5pt !important; line-height: 1.75 !important; max-width: none !important; }
+  #print-area .cert-doc__nome { font-size: 20pt !important; border-bottom-width: 1.5px !important; }
+  #print-area .cert-field__l { font-size: 7.5pt !important; }
+  #print-area .cert-field__v { font-size: 11pt !important; }
+  #print-area .cert-doc__grid { grid-template-columns: repeat(3, 1fr) !important; gap: 8mm !important; }
+  #print-area .cert-doc__sign span { font-size: 9pt !important; }
+  #print-area .cert-doc__qrlabel { font-size: 7pt !important; }
+  #print-area .cert-doc__codigo { font-size: 8.5pt !important; }
+  #print-area .qr-demo { width: 22mm !important; height: 22mm !important; }
+
+  /* "Imprimir todos": exatamente 1 certificado por folha. A quebra vai no
+     elemento ANTERIOR a cada certificado seguinte (mais confiável no Chrome
+     do que quebrar depois do último). */
+  #print-area .cert-doc + .cert-doc {
+    page-break-before: always; break-before: page;
+  }
+}
+
+/* Na tela, o botão de imprimir do modal fica junto das outras ações. */
+.cert-meta__acoes { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
