@@ -24,9 +24,14 @@
   /* ======================================================================
      DADOS DEMONSTRATIVOS
      ====================================================================== */
-  var NOW = new Date(2026, 8, 1, 16, 42); // 01/09/2026 16:42
+  // Data "de hoje" de toda a demonstração: 18/09/2026, 16:42 (sexta-feira).
+  var NOW = new Date(2026, 8, 18, 16, 42);
 
+  // iso(dia, mês, hora, minuto) → data da demonstração (2026).
+  // iso(dia, mês, ANO)          → usado em validades que caem em outro ano
+  //                               (o 3º argumento acima de 31 é sempre um ano).
   function iso(day, month, h, m) {
+    if (h > 31) return new Date(h, month - 1, day, 8, 0);
     return new Date(2026, month - 1, day, h || 8, m || 0);
   }
   function fmtTime(d) {
@@ -35,6 +40,33 @@
   function fmtDate(d) {
     return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
   }
+
+  /* ---- Utilitários de data / estatística (usados pelos módulos) ---- */
+  function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function addDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+  // Dias entre hoje e a data: negativo = já passou, 0 = hoje.
+  function daysUntil(d) { return Math.round((startOfDay(d) - startOfDay(NOW)) / 86400000); }
+  var MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  function fmtMonthYear(d) { return MESES_CURTOS[d.getMonth()] + "/" + d.getFullYear(); }
+  function vencTexto(d) {
+    var dias = daysUntil(d);
+    if (dias === 0) return "vence hoje";
+    if (dias < 0) return "vencido há " + Math.abs(dias) + (Math.abs(dias) === 1 ? " dia" : " dias");
+    return "vence em " + dias + (dias === 1 ? " dia" : " dias");
+  }
+  // Situação de validade → rótulo + classe de status JÁ EXISTENTE na identidade.
+  // (usa somente as variações funcionais --active / --review / --warn)
+  function validadeInfo(d, limiteAviso) {
+    var limite = limiteAviso == null ? 60 : limiteAviso;
+    var dias = daysUntil(d);
+    if (dias < 0) return { label: "Vencido", cls: "status--warn", dias: dias, nivel: "vencido" };
+    if (dias <= limite) return { label: "Vencimento próximo", cls: "status--review", dias: dias, nivel: "proximo" };
+    return { label: "Em dia", cls: "status--active", dias: dias, nivel: "ok" };
+  }
+  // CPF é SEMPRE exibido mascarado nesta demonstração (privacidade).
+  function maskCpf() { return "***.***.***-**"; }
+  function iniciais(nome) { return String(nome || "").split(" ").filter(Boolean).map(function (p) { return p[0]; }).join("").slice(0, 2).toUpperCase(); }
+  function pct(parte, total) { return total ? Math.round((parte / total) * 100) : 0; }
 
   // ---- Clientes (cada cliente é único; obras são filhos) ----
   var CLIENTES = [
@@ -200,6 +232,94 @@
           ]
         }
       ]
+    },
+    {
+      // Cliente criado para demonstrar o vínculo UM CLIENTE → VÁRIAS OBRAS
+      // (usado nas telas de Fiscalizações, Certificados e Documentos).
+      id: "c5",
+      nome: "Construtora Horizonte",
+      cnpj: "00.000.000/0005-00",
+      segmento: "Construção civil",
+      contato: "Marcos Vinícius",
+      email: "sst@construtorahorizonte.com.br",
+      telefone: "(81) 3000-0004",
+      responsavel: "Maria Silva",
+      obras: [
+        {
+          id: "o9",
+          nome: "Edifício Aurora",
+          local: "Recife — PE",
+          status: "Em andamento",
+          responsavel: "Maria Silva",
+          inicio: "03/02/2026",
+          previsao: "03/02/2027",
+          progresso: 57,
+          resumo: "Edifício residencial de 22 pavimentos — acompanhamento SST com foco em trabalhos em altura, instalações elétricas e proteções coletivas.",
+          servicos: [
+            { id: "s13", nome: "Acompanhamento SST", tipo: "Consultoria SST", inicio: "03/02/2026", previsao: "03/02/2027", responsavel: "Maria Silva", status: "Em andamento", os: "OS #2026-0081" },
+            { id: "s14", nome: "Inspeção de segurança mensal", tipo: "Inspeção de obra", inicio: "10/02/2026", previsao: "Recorrente", responsavel: "Maria Silva", status: "Em andamento", os: "OS #2026-0082" },
+            { id: "s15", nome: "Treinamento NR 18", tipo: "Treinamento", inicio: "15/09/2026", previsao: "15/09/2026", responsavel: "Ana Costa", status: "Finalizado", os: "OS #2026-0094" }
+          ]
+        },
+        {
+          id: "o10",
+          nome: "Residencial Parque Sul",
+          local: "Jaboatão dos Guararapes — PE",
+          status: "Em andamento",
+          responsavel: "João Pereira",
+          inicio: "20/05/2026",
+          previsao: "20/05/2027",
+          progresso: 34,
+          resumo: "Condomínio de 5 blocos — implantação de PGR, inspeções de extintores e controle de EPIs e EPCs.",
+          servicos: [
+            { id: "s16", nome: "Consultoria SST", tipo: "Consultoria SST", inicio: "20/05/2026", previsao: "20/05/2027", responsavel: "João Pereira", status: "Em andamento", os: "OS #2026-0085" },
+            { id: "s17", nome: "Inspeção de extintores", tipo: "Inspeção de obra", inicio: "01/06/2026", previsao: "Recorrente", responsavel: "João Pereira", status: "Em andamento", os: "OS #2026-0086" }
+          ]
+        },
+        {
+          id: "o11",
+          nome: "Galpão Logístico Recife",
+          local: "Cabo de Santo Agostinho — PE",
+          status: "Em andamento",
+          responsavel: "Ana Costa",
+          inicio: "12/03/2026",
+          previsao: "12/01/2027",
+          progresso: 71,
+          resumo: "Galpão logístico de 9.400 m² — gestão de riscos mecânicos, inspeção de empilhadeiras e cintos de segurança.",
+          servicos: [
+            { id: "s18", nome: "Gestão de riscos", tipo: "PGR / NR-12", inicio: "12/03/2026", previsao: "12/01/2027", responsavel: "Ana Costa", status: "Em andamento", os: "OS #2026-0088" },
+            { id: "s19", nome: "Inspeção de máquinas e veículos", tipo: "Inspeção de obra", inicio: "25/03/2026", previsao: "Recorrente", responsavel: "Ana Costa", status: "Em andamento", os: "OS #2026-0089" }
+          ]
+        }
+      ]
+    },
+    {
+      id: "c6",
+      nome: "Empresa Alpha",
+      cnpj: "00.000.000/0006-00",
+      segmento: "Serviços industriais",
+      contato: "Renata Lopes",
+      email: "rh@empresaalpha.com.br",
+      telefone: "(81) 3000-0005",
+      responsavel: "Maria Silva",
+      obras: [
+        {
+          id: "o12",
+          nome: "Unidade Recife",
+          local: "Recife — PE",
+          status: "Em andamento",
+          responsavel: "Maria Silva",
+          inicio: "15/01/2026",
+          previsao: "15/01/2027",
+          progresso: 62,
+          resumo: "Unidade industrial de serviços — PCMSO, inspeção de EPIs por colaborador e treinamentos normativos.",
+          servicos: [
+            { id: "s20", nome: "Assessoria SST", tipo: "Consultoria SST", inicio: "15/01/2026", previsao: "15/01/2027", responsavel: "Maria Silva", status: "Em andamento", os: "OS #2026-0072" },
+            { id: "s21", nome: "Inspeção de EPIs", tipo: "Inspeção de obra", inicio: "01/02/2026", previsao: "Recorrente", responsavel: "Ana Costa", status: "Em andamento", os: "OS #2026-0073" },
+            { id: "s22", nome: "Treinamentos NR", tipo: "Treinamento", inicio: "10/03/2026", previsao: "Recorrente", responsavel: "Ana Costa", status: "Em andamento", os: "OS #2026-0075" }
+          ]
+        }
+      ]
     }
   ];
 
@@ -216,7 +336,22 @@
     { id: "f1374", obra: "o2", servico: "s4", os: "OS #2026-0039", data: iso(1, 9, 10, 15), obs: "Inspeção de empilhadeiras na área de expedição.", relatorio: "RDO #034", responsavel: "João Pereira", atividade: "Inspeção de máquinas" },
     { id: "f1373", obra: "o2", servico: "s4", os: "OS #2026-0039", data: iso(31, 8, 11, 2), obs: "Verificação de proteção de máquinas (NR-12).", relatorio: "RDO #033", responsavel: "João Pereira", atividade: "NR-12" },
     { id: "f1372", obra: "o3", servico: "s6", os: "OS #2025-0007", data: iso(14, 1, 15, 20), obs: "Obra concluída — entrega final da documentação SST.", relatorio: "RDO #120", responsavel: "Maria Silva", atividade: "Entrega" },
-    { id: "f1371", obra: "o4", servico: "s7", os: "OS #2026-0071", data: iso(1, 9, 8, 55), obs: "Canteiro de obras — início da implantação do PGR.", relatorio: "RDO #034", responsavel: "Ana Costa", atividade: "Implantação PGR" }
+    { id: "f1371", obra: "o4", servico: "s7", os: "OS #2026-0071", data: iso(1, 9, 8, 55), obs: "Canteiro de obras — início da implantação do PGR.", relatorio: "RDO #034", responsavel: "Ana Costa", atividade: "Implantação PGR" },
+    // ---- Construtora Horizonte · Edifício Aurora (o9) ----
+    { id: "f1370", obra: "o9", servico: "s14", os: "OS #2026-0082", data: iso(17, 9, 10, 25), obs: "Verificação de extintores do pavimento térreo — um equipamento com validade vencida.", relatorio: "RDO #018", responsavel: "Maria Silva", atividade: "Inspeção de extintores" },
+    { id: "f1369", obra: "o9", servico: "s14", os: "OS #2026-0082", data: iso(17, 9, 9, 40), obs: "Inspeção geral de SST — área de circulação e proteções coletivas.", relatorio: "RDO #018", responsavel: "Maria Silva", atividade: "Inspeção geral de SST" },
+    { id: "f1368", obra: "o9", servico: "s13", os: "OS #2026-0081", data: iso(16, 9, 15, 12), obs: "Capacetes da equipe de fachada — dois com desgaste na carcaça.", relatorio: "RDO #017", responsavel: "Maria Silva", atividade: "Inspeção de capacetes" },
+    { id: "f1367", obra: "o9", servico: "s15", os: "OS #2026-0094", data: iso(15, 9, 11, 5), obs: "Turma de NR 18 — aula prática no canteiro.", relatorio: "RDO #016", responsavel: "Ana Costa", atividade: "Treinamento NR 18" },
+    // ---- Construtora Horizonte · Residencial Parque Sul (o10) ----
+    { id: "f1366", obra: "o10", servico: "s17", os: "OS #2026-0086", data: iso(16, 9, 14, 30), obs: "Extintor do bloco B com vencimento próximo — sinalizado para troca.", relatorio: "RDO #012", responsavel: "João Pereira", atividade: "Inspeção de extintores" },
+    { id: "f1365", obra: "o10", servico: "s16", os: "OS #2026-0085", data: iso(16, 9, 9, 15), obs: "Retorno de não conformidade — sinalização corrigida no acesso.", relatorio: "RDO #012", responsavel: "João Pereira", atividade: "Correção de não conformidade" },
+    { id: "f1364", obra: "o10", servico: "s16", os: "OS #2026-0085", data: iso(10, 9, 16, 48), obs: "Ausência de sinalização de advertência — não conformidade registrada.", relatorio: "RDO #008", responsavel: "João Pereira", atividade: "Não conformidade" },
+    // ---- Construtora Horizonte · Galpão Logístico Recife (o11) ----
+    { id: "f1363", obra: "o11", servico: "s19", os: "OS #2026-0089", data: iso(12, 9, 10, 50), obs: "Cinto de segurança da Empilhadeira 02 apresentando desgaste.", relatorio: "RDO #021", responsavel: "Ana Costa", atividade: "Inspeção de cinto de segurança" },
+    { id: "f1362", obra: "o11", servico: "s19", os: "OS #2026-0089", data: iso(12, 9, 9, 20), obs: "Inspeção de bancos e assentos de veículos da frota interna.", relatorio: "RDO #021", responsavel: "Ana Costa", atividade: "Inspeção de assentos" },
+    // ---- Empresa Alpha · Unidade Recife (o12) ----
+    { id: "f1361", obra: "o12", servico: "s21", os: "OS #2026-0073", data: iso(15, 9, 13, 55), obs: "Inspeção de EPIs — 24 colaboradores verificados.", relatorio: "RDO #026", responsavel: "Ana Costa", atividade: "Inspeção de EPIs" },
+    { id: "f1360", obra: "o12", servico: "s20", os: "OS #2026-0072", data: iso(15, 9, 11, 10), obs: "Verificação de documentos de SST da unidade.", relatorio: "RDO #026", responsavel: "Maria Silva", atividade: "Verificação documental" }
   ];
 
   // ---- Equipe demonstrativa ----
@@ -231,12 +366,17 @@
   // ---- Relatórios (RDO) demonstrativos por obra ----
   function makeRDOs() {
     var rdos = [];
-    var base = { o1: { n: 34, from: 27, months: 8 }, o2: { n: 31, from: 24, months: 8 }, o4: { n: 9, from: 6, months: 7 } };
+    var base = {
+      o1: { n: 34, months: 8 }, o2: { n: 31, months: 8 }, o4: { n: 9, months: 7 },
+      // o9 (Edifício Aurora) mantém 12 relatórios no histórico da obra.
+      o9: { n: 18, months: 8, qtd: 12 }, o10: { n: 12, months: 7 }, o11: { n: 21, months: 6 }, o12: { n: 26, months: 8 }
+    };
     Object.keys(base).forEach(function (ok) {
       var cfg = base[ok];
       var num = cfg.n;
-      for (var i = 0; i < 6; i++) {
-        var d = new Date(2026, 8, 1 - i, 18, 0);
+      for (var i = 0; i < (cfg.qtd || 6); i++) {
+        // "Hoje" na demonstração é 18/09/2026 — os RDOs mais recentes partem dessa data.
+        var d = new Date(2026, 8, 18 - i, 18, 0);
         if (d.getDay() === 0) { d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1, 18, 0); }
         rdos.push({
           id: ok + "-r" + (num - i),
@@ -404,6 +544,17 @@
     atividade: function () {
       closeSheet();
       openModal(modalRegistrarAtividade(actions._ctxObra || obraPorId("o1")));
+    },
+    // ---- Registro rápido em campo (módulos novos) ----
+    "quick-fiscalizacao": function () {
+      closeSheet();
+      showToast("Nova fiscalização (demonstração).");
+      location.hash = "#/fiscalizacoes";
+    },
+    "quick-evidencias": function () {
+      closeSheet();
+      var ob = actions._ctxObra || obraPorId("o9");
+      openModal(modalAdicionarFoto(ob));
     }
   };
 
@@ -465,7 +616,7 @@
       '<label class="field"><span class="field__label">Tipo de serviço</span><select class="field__input"><option>Consultoria SST</option><option>Acompanhamento de obra</option><option>Inspeção de segurança</option><option>Treinamento</option><option>Elaboração documental</option><option>Gestão de riscos</option></select></label>' +
       '<label class="field"><span class="field__label">Nome do serviço</span><input class="field__input" value="Acompanhamento SST" /></label>' +
       '<div class="form-row-2">' +
-      '<label class="field"><span class="field__label">Início</span><input class="field__input" value="01/09/2026" /></label>' +
+      '<label class="field"><span class="field__label">Início</span><input class="field__input" value="18/09/2026" /></label>' +
       '<label class="field"><span class="field__label">Previsão</span><input class="field__input" value="01/12/2026" /></label>' +
       "</div>" +
       '<label class="field"><span class="field__label">Responsável</span><select class="field__input">' + EQUIPE.map(function (e) { return '<option>' + e.nome + "</option>"; }).join("") + "</select></label>" +
@@ -485,7 +636,7 @@
       '<label class="field"><span class="field__label">Serviço</span><select class="field__input">' + (obra.servicos.length ? obra.servicos.map(function (s) { return "<option>" + esc(s.nome) + "</option>"; }).join("") : "<option>—</option>") + "</select></label>" +
       '<label class="field"><span class="field__label">Atividade</span><input class="field__input" value="Inspeção de EPC" /></label>' +
       '<label class="field"><span class="field__label">Observação</span><textarea class="field__input" placeholder="Descreva a evidência…"></textarea></label>' +
-      '<label class="field"><span class="field__label">Data/hora</span><input class="field__input" value="Automática — 01/09/2026 16:42" disabled style="opacity:.75" /></label>' +
+      '<label class="field"><span class="field__label">Data/hora</span><input class="field__input" value="Automática — 18/09/2026 16:42" disabled style="opacity:.75" /></label>' +
       "</div></div>" +
       '<div class="modal__foot"><button class="btn btn--light" data-modal-close>Cancelar</button><button class="btn btn--primary" data-modal-action="salvar-foto">Salvar evidência</button></div>'
     );
@@ -542,7 +693,7 @@
       '<div><strong style="color:var(--green-900)">MS Consultoria</strong><div style="font-size:.76rem;color:var(--grey-500)">Saúde e Segurança do Trabalho</div></div>' +
       '<span style="margin-left:auto" class="status status--muted">Rascunho</span>' +
       "</div>" +
-      '<div style="padding:16px 0;display:grid;gap:4px;font-size:.9rem"><strong style="font-size:1.05rem;color:var(--green-900)">RDO — Relatório Diário de Obra</strong><span>' + esc(obra.nome) + "</span><span style='color:var(--grey-500)'>01 de setembro de 2026 · Responsável: Maria Silva</span></div>" +
+      '<div style="padding:16px 0;display:grid;gap:4px;font-size:.9rem"><strong style="font-size:1.05rem;color:var(--green-900)">RDO — Relatório Diário de Obra</strong><span>' + esc(obra.nome) + "</span><span style='color:var(--grey-500)'>18 de setembro de 2026 · Responsável: Maria Silva</span></div>" +
       '<div style="border-top:1px dashed var(--grey-200);padding:14px 0;font-size:.84rem;color:var(--grey-700)"><strong style="color:var(--green-900)">Atividades executadas</strong><div style="margin-top:6px;display:grid;gap:4px">• Inspeção do pavimento 4<br/>• Verificação de EPC<br/>• DDS com a equipe</div></div>' +
       '<div style="border-top:1px dashed var(--grey-200);padding:14px 0;font-size:.84rem;color:var(--grey-700)"><strong style="color:var(--green-900)">Registro fotográfico</strong><div style="margin-top:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px">' +
       '<div class="photo-card__img" style="aspect-ratio:4/3;border-radius:8px"></div><div class="photo-card__img" style="aspect-ratio:4/3;border-radius:8px"></div><div class="photo-card__img" style="aspect-ratio:4/3;border-radius:8px"></div>' +
@@ -593,15 +744,20 @@
     setActiveNav();
   }
 
+  // Rota/sub-rota → item do menu que deve ficar ativo.
+  // Ex.: a tela de detalhe "fiscalizacao/c1" mantém "Fiscalizações" aceso.
+  var NAV_ALIAS = {
+    obra: "obras", cliente: "clientes", rdo: "relatorios", "fotos-obra": "fotos",
+    fiscalizacao: "fiscalizacoes", "fiscalizacao-nova": "fiscalizacoes",
+    certificado: "certificados", "certificado-lote": "certificados",
+    "certificado-individual": "certificados", modelos: "certificados"
+  };
+
   function setActiveNav() {
     var route = currentRoute().name;
+    var alvo = NAV_ALIAS[route] || route;
     $$(".nav-item[data-nav]").forEach(function (el) {
-      var on = el.getAttribute("data-nav") === route ||
-        (route === "obra" && el.getAttribute("data-nav") === "obras") ||
-        (route === "cliente" && el.getAttribute("data-nav") === "clientes") ||
-        (route === "rdo" && el.getAttribute("data-nav") === "relatorios") ||
-        (route === "fotos-obra" && el.getAttribute("data-nav") === "fotos");
-      el.classList.toggle("is-active", on);
+      el.classList.toggle("is-active", el.getAttribute("data-nav") === alvo);
     });
   }
 
@@ -621,8 +777,12 @@
     ];
 
     view.innerHTML =
-      '<div class="page-head rv"><div><h1 class="page-head__title">Dashboard</h1><p class="page-head__sub">Visão operacional de hoje · <strong>01 de setembro de 2026</strong></p></div>' +
+      '<div class="page-head rv"><div><h1 class="page-head__title">Dashboard</h1><p class="page-head__sub">Visão operacional de hoje · <strong>18 de setembro de 2026</strong></p></div>' +
       '<div class="page-head__actions"><button class="btn btn--light btn--sm" data-action="novo-cliente">+ Novo cliente</button><button class="btn btn--primary btn--sm" data-action="novo-rdo">Gerar relatório do dia</button></div></div>' +
+
+      // Blocos acrescentados pelos módulos (fiscalizações, certificados…).
+      // Não substituem nada do dashboard original.
+      dashTopoHtml() +
 
       '<div class="kpi-grid">' +
       kpis.map(function (k, i) {
@@ -704,12 +864,15 @@
       '<div class="card rv"><div class="card__head"><h3>Pendências</h3><a class="link-btn" href="#/relatorios">Ver relatórios</a></div><div class="feed">' +
       [
         { icon: "warn", t: "Rascunho", title: "RDO #034 aguardando revisão", desc: "Residencial Boa Vista · gerado hoje", obra: "o1" },
-        { icon: "warn", t: "Sem RDO", title: "Obra sem relatório hoje", desc: "Torre Comercial Mar · nenhum RDO em 01/09", obra: "o8" },
+        { icon: "warn", t: "Sem RDO", title: "Obra sem relatório hoje", desc: "Torre Comercial Mar · nenhum RDO em 18/09", obra: "o8" },
         { icon: "amber", t: "Set", title: "Documento vencendo", desc: "NR 35 — Turma B renova em 10/09", obra: "o1" },
         { icon: "warn", t: "Aberta", title: "Ocorrência aberta", desc: "Piso molhado na escada — pavimento 4", obra: "o1" }
       ].map(function (f) { return feedItem(f, f.obra || "o1"); }).join("") +
       "</div></div>" +
-      "</div>";
+      "</div>" +
+
+      // Blocos finais acrescentados pelos módulos (fiscalizações, certificados…).
+      dashFimHtml();
 
     wireView();
   }
@@ -746,7 +909,7 @@
         '<td><span class="cell-strong">' + esc(c.nome) + '</span><span class="cell-sub">' + esc(c.segmento) + "</span></td>" +
         "<td>" + c.obras.length + "</td>" +
         "<td>" + servicos + "</td>" +
-        "<td>01/09/2026</td>" +
+        "<td>18/09/2026</td>" +
         "<td>" + (pend ? '<span class="status status--warn">' + pend + " pendência</span>" : '<span class="status status--active">Em dia</span>') + "</td>" +
         "<td>" + (pend ? '<span class="status status--warn status--pendente">Pendente</span>' : '<span class="status status--active status--em-andamento">Ativo</span>') + "</td>" +
         "</tr>";
@@ -799,6 +962,10 @@
       '<div class="entity-meta"><div class="entity-meta__label">Responsável MS</div><div class="entity-meta__value">' + esc(c.responsavel) + "</div></div>" +
       "</div></div>" +
 
+      // Bloco "HISTÓRICO DA OBRA" do cliente (obras cadastradas + atalhos).
+      // Inserido pelos módulos; vazio por padrão — não altera nada do original.
+      clienteTopoHtml(c) +
+
       '<div class="indicators">' +
       '<div class="indicator rv"><div class="indicator__value">' + c.obras.length + '</div><div class="indicator__label">Obras</div></div>' +
       '<div class="indicator rv"><div class="indicator__value">' + servicos + '</div><div class="indicator__label">Serviços ativos</div></div>' +
@@ -811,6 +978,11 @@
       '<button class="tab" data-tab="obras">Obras <span class="tab__count">' + c.obras.length + "</span></button>" +
       '<button class="tab" data-tab="documentos">Documentos</button>' +
       '<button class="tab" data-tab="historico">Histórico</button>' +
+      // Abas extras registradas pelos módulos (ex.: Fiscalizações do cliente).
+      CLIENTE_TABS.map(function (t) {
+        return '<button class="tab" data-tab="' + esc(t.id) + '">' + esc(t.label) +
+          (t.count ? ' <span class="tab__count">' + t.count(c) + "</span>" : "") + "</button>";
+      }).join("") +
       "</div>" +
 
       '<div id="tab-content"></div>';
@@ -884,15 +1056,17 @@
     }
 
     function activate(tabName) {
-      $$("#tab-content .tab").forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-tab") === tabName); });
+      $$("#view .tab").forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-tab") === tabName); });
       var map = { resumo: tabResumo, obras: tabObras, documentos: tabDocumentos, historico: tabHistorico };
+      // Abas extras dos módulos.
+      var extTab = CLIENTE_TABS.filter(function (t) { return t.id === tabName; })[0];
       var el = $("#tab-content");
-      el.innerHTML = map[tabName]();
+      el.innerHTML = extTab ? extTab.render(c) : (map[tabName] || tabResumo)();
       wireView();
       revealAll(el);
     }
     activate("resumo");
-    $$(".tab").forEach(function (tab) {
+    $$("#view .tab").forEach(function (tab) {
       tab.addEventListener("click", function () {
         activate(tab.getAttribute("data-tab"));
       });
@@ -948,6 +1122,10 @@
       '<div class="entity-meta"><div class="entity-meta__label">Responsável</div><div class="entity-meta__value">' + esc(o.responsavel) + "</div></div>" +
       "</div></div>" +
 
+      // Bloco "HISTÓRICO DA OBRA" (contadores + atalhos das abas).
+      // Inserido pelos módulos; vazio por padrão.
+      obraTopoHtml(o, c) +
+
       '<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">' +
       '<div class="kpi rv"><span class="kpi__label">Relatórios</span><div class="kpi__value">' + rdos.length + '</div></div>' +
       '<div class="kpi rv"><span class="kpi__label">Fotos</span><div class="kpi__value">' + fotos.length + '</div></div>' +
@@ -963,6 +1141,11 @@
       '<button class="tab" data-tab="documentos">Documentos</button>' +
       '<button class="tab" data-tab="equipe">Equipe</button>' +
       '<button class="tab" data-tab="historico">Histórico</button>' +
+      // Abas extras registradas pelos módulos (ex.: Fiscalizações da obra).
+      OBRA_TABS.map(function (t) {
+        return '<button class="tab" data-tab="' + esc(t.id) + '">' + esc(t.label) +
+          (t.count ? ' <span class="tab__count">' + t.count(o) + "</span>" : "") + "</button>";
+      }).join("") +
       "</div>" +
       '<div id="tab-content"></div>';
 
@@ -1018,7 +1201,7 @@
       var lista = rdos;
       return (
         '<div class="card rv" style="margin-bottom:16px;padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:linear-gradient(120deg,var(--green-900),var(--green-800));border:none">' +
-        '<div style="color:#fff;flex:1;min-width:200px"><strong style="font-size:1.02rem">Relatório do dia — 01/09/2026</strong><div style="font-size:.84rem;color:rgba(255,255,255,.75)">7 atividades · 18 fotos · 3 observações · 1 ocorrência</div></div>' +
+        '<div style="color:#fff;flex:1;min-width:200px"><strong style="font-size:1.02rem">Relatório do dia — 18/09/2026</strong><div style="font-size:.84rem;color:rgba(255,255,255,.75)">7 atividades · 18 fotos · 3 observações · 1 ocorrência</div></div>' +
         '<button class="btn btn--amber btn--sm" data-action="novo-rdo">Gerar RDO automaticamente</button>' +
         '<button class="btn btn--light btn--sm" data-action="registrar-atividade">+ Registrar atividade</button>' +
         "</div>" +
@@ -1080,8 +1263,10 @@
     function activate(tabName) {
       $$("#view .tab").forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-tab") === tabName); });
       var map = { resumo: tabResumo, servicos: tabServicos, rdos: tabRdos, fotos: tabFotos, documentos: tabDocumentos, equipe: tabEquipe, historico: tabHistorico };
+      // Abas extras dos módulos.
+      var extTab = OBRA_TABS.filter(function (t) { return t.id === tabName; })[0];
       var el = $("#tab-content");
-      el.innerHTML = map[tabName]();
+      el.innerHTML = extTab ? extTab.render(o, c) : (map[tabName] || tabResumo)();
       wireView();
       revealAll(el);
     }
@@ -1403,6 +1588,73 @@
   }
 
   /* ======================================================================
+     EXTENSÕES DOS MÓDULOS (Fiscalizações, Certificados, Agenda, etc.)
+     ----------------------------------------------------------------------
+     Os arquivos js/fiscalizacoes.js, js/certificados.js e js/paginas.js
+     registram suas rotas aqui, sem precisar alterar o roteador.
+     ====================================================================== */
+  var EXT_ROUTES = {};
+
+  function registerRoute(nome, fn) { EXT_ROUTES[nome] = fn; }
+
+  /* ---- Pontos de extensão usados pelos módulos (aditivos) ----------------
+     DASH_TOPO  → faixa inserida logo abaixo do cabeçalho do Dashboard
+     DASH_FIM   → blocos inseridos ao final do Dashboard
+     OBRA_TABS  → abas extras na tela da obra (ex.: Fiscalizações)
+     CLIENTE_TABS → abas extras na tela do cliente
+     Nada disso remove ou altera o que já existe: apenas acrescenta.        */
+  var DASH_TOPO = [], DASH_FIM = [], OBRA_TABS = [], CLIENTE_TABS = [];
+  var OBRA_TOPO = [], CLIENTE_TOPO = [];
+  function registerDashTopo(fn) { DASH_TOPO.push(fn); }
+  function registerDashFim(fn) { DASH_FIM.push(fn); }
+  function registerObraTab(tab) { OBRA_TABS.push(tab); }
+  function registerClienteTab(tab) { CLIENTE_TABS.push(tab); }
+  function registerObraTopo(fn) { OBRA_TOPO.push(fn); }
+  function registerClienteTopo(fn) { CLIENTE_TOPO.push(fn); }
+  function dashTopoHtml() { return DASH_TOPO.map(function (f) { return f(); }).join(""); }
+  function dashFimHtml() { return DASH_FIM.map(function (f) { return f(); }).join(""); }
+  function obraTopoHtml(o, c) { return OBRA_TOPO.map(function (f) { return f(o, c); }).join(""); }
+  function clienteTopoHtml(c) { return CLIENTE_TOPO.map(function (f) { return f(c); }).join(""); }
+
+  // Namespace compartilhado — única ponte entre este arquivo e os módulos.
+  // Nada aqui altera o comportamento existente; apenas expõe utilitários.
+  window.MS = {
+    // dados
+    CLIENTES: CLIENTES, FOTOS: FOTOS, EQUIPE: EQUIPE, RDOs: RDOs,
+    NOW: NOW,
+    // helpers de dados
+    obraPorId: obraPorId, clientePorObra: clientePorObra, rdoPorObra: rdoPorObra,
+    fotosPorObra: fotosPorObra, obrasEmAndamento: obrasEmAndamento,
+    // helpers de formatação
+    iso: iso, fmtDate: fmtDate, fmtTime: fmtTime, esc: esc,
+    addDays: addDays, daysUntil: daysUntil, vencTexto: vencTexto,
+    fmtMonthYear: fmtMonthYear, validadeInfo: validadeInfo,
+    maskCpf: maskCpf, iniciais: iniciais, pct: pct,
+    MESES_CURTOS: MESES_CURTOS,
+    // infraestrutura de UI
+    view: view, showToast: showToast, openModal: openModal, closeModal: closeModal,
+    openSheet: openSheet, closeSheet: closeSheet, closeMenu: closeMenu,
+    modalHeader: modalHeader, revealAll: revealAll, wireView: wireView,
+    showApp: showApp, setCrumbs: setCrumbs, setActiveNav: setActiveNav,
+    // ações de modal/sheet compartilhadas
+    actions: actions,
+    // roteamento
+    registerRoute: registerRoute,
+    // pontos de extensão (blocos extras sem alterar o que já existe)
+    registerDashTopo: registerDashTopo, registerDashFim: registerDashFim,
+    registerObraTab: registerObraTab, registerClienteTab: registerClienteTab,
+    registerObraTopo: registerObraTopo, registerClienteTopo: registerClienteTopo,
+    dashTopoHtml: dashTopoHtml, dashFimHtml: dashFimHtml,
+    obraTopoHtml: obraTopoHtml, clienteTopoHtml: clienteTopoHtml,
+    go: function (hash) { location.hash = "#/" + String(hash).replace(/^#?\/?/, ""); },
+    rerender: function () { renderRoute(); },
+    // escreve o HTML da tela e religa os eventos
+    setView: function (html) { view.innerHTML = html; wireView(); revealAll(view); },
+    // estado compartilhado entre módulos (fiscalização/importação em andamento)
+    state: {}
+  };
+
+  /* ======================================================================
      ROUTER
      ====================================================================== */
   function parseHash() {
@@ -1414,6 +1666,13 @@
 
   function renderRoute() {
     var r = parseHash();
+    // Rotas registradas pelos módulos têm prioridade.
+    if (EXT_ROUTES[r.name]) {
+      EXT_ROUTES[r.name](r.parts);
+      setActiveNav();
+      revealAll(view);
+      return;
+    }
     switch (r.name) {
       case "login": renderLogin(); break;
       case "dashboard": renderDashboard(); break;
